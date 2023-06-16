@@ -1,0 +1,1612 @@
+---
+title: "Analysis with taxa concatenated to family level"
+author: "segan"
+date: '2022-11-28'
+output:
+  github_document:
+    toc: true
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+# Load libraries
+
+```{r results='hide'}
+# libraries
+pkgs <- c(
+  "tidyverse",
+  "phyloseq",
+  "ggpubr",
+  "ggplot2",
+  "vegan",
+  "reshape2",
+  "plotly",
+  "ampvis2",
+  "microbiomeutilities",
+  "RColorBrewer",
+  "viridis",
+  "biomeUtils",
+  "microViz",
+  "microbiome",
+  "Rtsne",
+  "umap",
+  "yingtools2", #remotes::install_github("ying14/yingtools2")
+  "scales",
+  "ggrepel"
+)
+
+lapply(pkgs, require, character.only = TRUE)
+theme_set(theme_bw())
+```
+
+#Create output folders
+```{r}
+dir.create(path = "./figures/heatmaps/all", recursive = TRUE)
+dir.create(path = "./figures/heatmaps/heatmaps_by_study/phylum_level", recursive = TRUE)
+dir.create(path = "./figures/heatmaps/heatmaps_by_study/family_level", recursive = TRUE)
+dir.create(path = "./tables")
+dir.create(path = "./figures/boxplot")
+dir.create(path = "./figures/pie_charts")
+dir.create(path = "./figures/alphadiv")
+```
+
+
+# Merge phyloseq files
+
+```{r}
+# Path to datasets drive
+path_list <- list.files("./RData/primary_id", pattern=".Rda", full.names=TRUE)
+
+# as load in each ps object rename to the project number
+for (i in path_list)
+{
+  load(i)
+  gdata::mv(from = "ps", to = gsub(".Rda", "", (sapply(strsplit(i, "/"), function(x)
+    paste(x[4], sep = "/")))))
+}
+
+#Merge
+ps_merge <-
+  merge_phyloseq(
+    ps_ERP021273,
+    ps_ERP107582,
+    ps_ERP108433,
+    ps_ERP114897,
+    ps_ERP120273,
+    ps_ERP124577,
+    ps_SRP187837,
+    ps_SRP241247,
+    ps_SRP247849,
+    ps_SRP266568,
+    ps_SRP279236,
+    ps_SRP290868,
+    ps_SRP307470,
+    ps_SRP309452,
+    ps_SRP320497,
+    ps_SRP359931,
+    ps_SRP369790,
+    ps_SRP370478,
+    ps_SRP383204
+  )
+```
+
+Clean up taxonomy names 
+
+```{r}
+# taxonomy table
+taxtab <- as.data.frame(ps_merge@tax_table)
+#taxtab <- rownames_to_column(taxtab, var = "ASV_id")
+# otu count table
+otutab <- as.data.frame(ps_merge@otu_table)
+#otutab <- rownames_to_column(otutab, var = "ASV_id")
+# sample data table
+samtab <- as.data.frame(ps_merge@sam_data)
+# ref sequences
+refseq <- refseq(ps_merge, FALSE)
+
+sort(unique(taxtab$Phylum))
+taxtab <-
+  taxtab %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Bacillota", "Firmicutes [Bacillota]", Phylum)) %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Firmicutes", "Firmicutes [Bacillota]", Phylum)) %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Actinomycetota", "Actinobacteria [Actinomycetota]", Phylum)) %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Actinobacteria", "Actinobacteria [Actinomycetota]", Phylum)) %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Pseudomonadota", "Proteobacteria [Pseudomonadota]", Phylum))  %>% 
+  mutate(Phylum = ifelse(Phylum %in% "Proteobacteria", "Proteobacteria [Pseudomonadota]", Phylum)) %>% 
+  mutate(Class = ifelse(Class %in% "Actinomycetes", "Actinomycetia", Class)) %>% 
+  mutate(Family = ifelse(Family %in% "Bacillales Family X. Incertae Sedis", "Bacillales X. (i.s.)", Family)) %>% 
+  mutate(Family = ifelse(Family %in% "Clostridiales Family XVII. Incertae Sedis", "Clostridiales XVII. (i.s.)", Family)) %>% 
+  mutate(Family = ifelse(Family %in% "Eubacteriales Family XII. Incertae Sedis", "Eubacteriales XII. (i.s.)", Family)) %>% 
+  mutate(Family = ifelse(Family %in% "Eubacteriales Family XIII. Incertae Sedis", "Eubacteriales XIII. (i.s.)", Family)) %>% 
+  mutate(Family = ifelse(Family %in% "Thermoanaerobacterales Family III. Incertae Sedis", "Thermoanaerobacterales III. (i.s.)", Family))
+
+sort(unique(taxtab$Phylum))
+
+taxmat <- as.matrix(taxtab)
+otumat <- as.matrix(otutab)
+
+OTU <- phyloseq::otu_table(otumat, taxa_are_rows = FALSE)
+TAX <- phyloseq::tax_table(taxmat)
+ps_merge <- phyloseq(OTU, TAX, samtab, refseq)
+
+
+#Save phyloseq object as .Rda file
+save(ps_merge, file = "./RData/ps_merge.Rda")
+```
+
+```{r}
+load("./RData/ps_merge.Rda")
+
+# ps_merge
+# # phyloseq-class experiment-level object
+# # otu_table()   OTU Table:         [ 83401 taxa and 1752 samples ]
+# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
+# # tax_table()   Taxonomy Table:    [ 83401 taxa by 7 taxonomic ranks ]
+# # refseq()      DNAStringSet:      [ 83401 reference sequences ]
+
+# # number of samples per project
+# table(ps_merge@sam_data$bioreactor_model)
+# # batch_Bas-Bellver_et_al_2020      7
+# # batch_Korth_et_al_2022            420
+# # batch_Kim_et_al_2022              115
+# # batch_Kleigrewe_et_al_2022        27
+# # batch_Elmen_et_al_2020            84
+# # ARCOL_Leclerc_et_al_2021          46
+# # M-ARCOL_Deschamps_et_al_2020      121
+# # SHIME_based_Gaisawat_2020         96
+# # SHIME_Firrman_et_al_2021          50
+# # SHIME_Liu_et_al_2022              30
+# # SHIME_Ma_et_al_2022               45
+# # M-SHIME_Chassaing_et_al_2017      151
+# # M-SHIME_Abbeele_2021              75
+# # SIMGI_Zorraquin_et_al_2021        6
+# # single_stage_Xu_et_al_ 2019       108
+# # TIM-2_Larsen_et_al_2019           132
+# # TIM-2_Vieira_et_al_2021           60
+# # Infors_Oliphant_et_al_2019        62
+# # PolyFermS_Pham_et_al_2019         117
+
+```
+
+# Concatenate taxonomy to family level 
+
+Melt phyloseq object by Family level taxonomy
+
+```{r}
+grp_abund <- get_group_abundances(ps_merge,
+                                  level = "Family",
+                                  group = "sampleID",
+                                  transform = "counts")
+sort(unique(grp_abund$OTUID))
+grp_abund <- dplyr::select(grp_abund, -sd_abundance)
+count_family <- pivot_wider(grp_abund, names_from = "OTUID",
+                    values_from = "mean_abundance")
+
+# making OTU count table
+OTU_mat <- count_family
+otumat <- column_to_rownames(OTU_mat, var = "sampleID")
+otumat <- as.matrix(otumat)
+
+# making taxonomy table
+TAX_names <- as.data.frame(colnames(count_family))
+TAX_names$Family <- TAX_names$`colnames(count_family)`
+colnames(TAX_names)[1] <- 'OTUID'
+TAX_names <- TAX_names[-1,]
+TAX_names$Genus <- ""
+TAX_names$Species <- ""
+taxdf <- as.data.frame(ps_merge@tax_table)
+taxdf <- taxdf[,1:5]
+taxdf <- taxdf[!duplicated(taxdf$Family), ]
+TAX_mat <- left_join(TAX_names, taxdf, by = "Family")
+TAX_mat <- dplyr::select(TAX_mat, OTUID, Kingdom, Phylum, Class, Order, Family, Genus, Species)
+TAX_mat <- column_to_rownames(TAX_mat, var = "OTUID")
+taxmat <- as.matrix(TAX_mat)
+colnames(taxmat) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+# making sample data
+sample_data <- as.data.frame(ps_merge@sam_data)
+# make sure order matches the OTU count data.
+idx<-match(OTU_mat$sampleID, sample_data$sampleID)
+sample_data <- sample_data[idx,]
+```
+
+Re-make phyloseq object
+```{r}
+OTU <- phyloseq::otu_table(otumat, taxa_are_rows = FALSE)
+TAX <- phyloseq::tax_table(taxmat)
+ps_merge_fam <- phyloseq(OTU, TAX)
+ps_merge_fam <- merge_phyloseq(ps_merge_fam, sample_data)
+# saved merge concatenated family level taxa, all samples from all projects(inc. zero sum samples) 
+save(ps_merge_fam, file = "./RData/ps_merge_fam.Rda")
+
+# ps_merge_fam
+# # phyloseq-class experiment-level object
+# # otu_table()   OTU Table:         [ 248 taxa and 1752 samples ]
+# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
+# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
+```
+
+# Load data
+
+Loading in merged `phyloseq` object concatenated at family level
+
+```{r}
+load("./RData/ps_merge_fam.Rda")
+
+# ps_merge_fam
+# # phyloseq-class experiment-level object
+# # otu_table()   OTU Table:         [ 248 taxa and 1752 samples ]
+# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
+# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
+```
+
+## Excluding projects/samples
+
+### 1. Exclude samples with 0 reads
+
+Subset phyloseq object to exclude samples with 0 count
+
+```{r}
+#Identify which samples had sum of 0 reads
+otumat2 <- as.data.frame(ps_merge_fam@otu_table)
+otumat2 <- otumat2 %>% 
+   mutate(sumrange = rowSums(across(where(is.numeric))))
+idx<-which(otumat2$sumrange == 0)
+otumat2 <- otumat2[idx,]
+exclude <- rownames(otumat2)
+exclude
+
+# remove these from phyloseq object
+ps_merge_fam <- subset_samples(ps_merge_fam, !sampleID %in%
+                        exclude)
+# ps_merge_fam
+# # phyloseq-class experiment-level object
+# # otu_table()   OTU Table:         [ 248 taxa and 1689 samples ]
+# # sample_data() Sample Data:       [ 1689 samples by 106 sample variables ]
+# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
+```
+
+### 2. Exclude samples coming from faeces
+
+```{r}
+ps_merge_fam <- subset_samples(ps_merge_fam, include_sample == "yes")
+
+# ps_merge_fam
+# # phyloseq-class experiment-level object
+# # otu_table()   OTU Table:         [ 248 taxa and 1619 samples ]
+# # sample_data() Sample Data:       [ 1619 samples by 106 sample variables ]
+# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
+table(ps_merge_fam@sam_data$bioreactor_model)
+```
+
+## Set order
+
+Manipulating `ps_merge_fam@sam_data` variables
+
+```{r}
+ps_merge_fam@sam_data$bioreactor_type <-
+  gsub(".*^M-", "", sapply(strsplit(
+    ps_merge_fam@sam_data$bioreactor_model, "_"
+  ), "[", 1))
+
+ps_merge_fam@sam_data$stage <-
+  as.character(ps_merge_fam@sam_data$stage)
+
+ps_merge_fam@sam_data$ndonor <-
+  factor(sapply(strsplit(ps_merge_fam@sam_data$ndonor_type, "_"), "[", 1),
+    levels = c("1", "2", "3", "4", "5", "6", "7", "8", "12"))
+
+ps_merge_fam@sam_data$donor_type <-
+  sapply(strsplit(ps_merge_fam@sam_data$ndonor_type, "_"), "[", 2)
+```
+
+Set order for variables
+```{r}
+#Set order for `bioreactor_model`
+ps_merge_fam@sam_data$bioreactor_model = factor(ps_merge_fam@sam_data$bioreactor_model, levels = c(
+  "batch_Bas-Bellver_et_al_2020",
+  "batch_Elmen_et_al_2020",
+  "batch_Kim_et_al_2022",
+  "batch_Kleigrewe_et_al_2022",
+  "batch_Korth_et_al_2022",
+  "single_stage_Xu_et_al_ 2019",
+  "SHIME_based_Gaisawat_2020",
+  "SHIME_Firrman_et_al_2021",
+  "SHIME_Liu_et_al_2022",
+  "SHIME_Ma_et_al_2022",
+  "M-SHIME_Abbeele_2021",
+  "M-SHIME_Chassaing_et_al_2017",
+  "SIMGI_Zorraquin_et_al_2021",
+  "TIM-2_Larsen_et_al_2019",
+  "TIM-2_Vieira_et_al_2021",
+  "Infors_Reese_et_al_2018",
+  "PolyFermS_Pham_et_al_2019",
+  "ARCOL_Leclerc_et_al_2021",
+  "M-ARCOL_Deschamps_et_al_2020"
+  ))
+
+#Set order for `bioreactor_type`
+ps_merge_fam@sam_data$bioreactor_type = factor(
+  ps_merge_fam@sam_data$bioreactor_type,
+  levels = c(
+    "batch",
+    "single",
+    "SHIME",
+    "SIMGI",
+    "TIM-2",
+    "Infors",
+    "PolyFermS",
+    "ARCOL"
+  )
+)
+```
+
+## Set colours
+
+```{r}
+cols_model <- c(
+  "#a6bddb",
+  "#74a9cf",
+  "#3690c0",
+  "#0570b0",
+  "#034e7b",
+  "#4d4d4d",
+  "#d4b9da",
+  "#c994c7",
+  "#df65b0",
+  "#ce1256",
+  "#980043",
+  "#67001f",
+  "#252525",
+  "#f46d43",
+  "#fdae61",
+  "#fee090",
+  "#d9ef8b",
+  "#41ab5d",
+  "#005a32"
+)
+
+cols_type <- c(
+  "#0570b0",
+  "#4d4d4d",
+  "#ce1256",
+  "#252525",
+  "#f46d43",
+  "#fee090",
+  "#d9ef8b",
+  "#005a32"
+)
+
+shape_type = c(0, 1, 2, 3, 4, 5, 6, 7)
+```
+
+## Transform to compositional data
+
+```{r}
+ps_merge_fam_comp = transform_sample_counts(ps_merge_fam, function(x) sqrt(x/sum(x)))
+
+##Can filter to min abundance??
+#ps_merge_fam2_filt = filter_taxa(ps_merge_fam2, function(x) var(x) > 1e-05, TRUE)
+```
+
+## Make ampvis2 object
+
+```{r}
+# require the devtools package to source gist
+if (!require("devtools"))
+  install.packages("devtools")
+
+#source the phyloseq_to_ampvis2() function from the gist
+devtools::source_gist("8d0ca4206a66be7ff6d76fc4ab8e66c6")
+
+# convert to ampvis2 and then save
+ampvis2_fam <- phyloseq_to_ampvis2(ps_merge_fam)
+ampvis2_fam_comp <- phyloseq_to_ampvis2(ps_merge_fam_comp)
+```
+
+```{r}
+rm(count_family, grp_abund, otumat2)
+rm(OTU_mat, otumat, sample_data, TAX_mat, TAX_names, taxdf, taxmat)
+rm(OTU, TAX, exclude, idx)
+```
+
+
+# Library size of samples
+
+```{r}
+n <- n_distinct(ps_merge_fam@sam_data$primary_id)
+df <-
+  as.data.frame(sample_data(ps_merge_fam)) # Make ggplot-friendly data.frame
+df$LibrarySize <- sample_sums(ps_merge_fam)
+df <- df[order(df$LibrarySize), ]
+df$Index <- seq(nrow(df))
+
+df$bioreactor_model = factor(df$bioreactor_model, levels = c(
+  "batch_Bas-Bellver_et_al_2020",
+  "batch_Elmen_et_al_2020",
+  "batch_Kim_et_al_2022",
+  "batch_Kleigrewe_et_al_2022",
+  "batch_Korth_et_al_2022",
+  "single_stage_Xu_et_al_ 2019",
+  "SHIME_based_Gaisawat_2020",
+  "SHIME_Firrman_et_al_2021",
+  "SHIME_Liu_et_al_2022",
+  "SHIME_Ma_et_al_2022",
+  "M-SHIME_Abbeele_2021",
+  "M-SHIME_Chassaing_et_al_2017",
+  "SIMGI_Zorraquin_et_al_2021",
+  "TIM-2_Larsen_et_al_2019",
+  "TIM-2_Vieira_et_al_2021",
+  "Infors_Reese_et_al_2018",
+  "PolyFermS_Pham_et_al_2019",
+  "ARCOL_Leclerc_et_al_2021",
+  "M-ARCOL_Deschamps_et_al_2020"
+  ))
+
+libQC <-
+  ggplot(data = df,
+         aes(
+           x = bioreactor_model,
+           y = LibrarySize,
+           color = bioreactor_model
+         )) + geom_point() +
+  scale_color_manual(values = cols_model) +
+  xlab("Bioreactor model") + ylab("Library size") +
+  theme(axis.text.x = element_text(angle = 270, hjust = 0, vjust = 0, size =12), 
+    axis.text.y = element_text(size =12),
+    legend.position = "none")
+
+ggsave(
+  filename = "library_size.png",
+  plot = libQC,
+  path = "./figures",
+  width = 10,
+  height = 10,
+  dpi = 300)
+```
+
+## Check for samples with low reads
+
+```{r}
+data.class(df$LibrarySize)
+# summary of number of samples per project
+summary <- df %>%
+    group_by(primary_id) %>%
+    summarise(count = n())
+summary
+# check with cut off at 5,000 reads
+lowreads <- subset(df, LibrarySize < 5000)
+tab1 <- lowreads %>%
+    group_by(primary_id) %>%
+    summarise(count = n())
+tab1
+```
+
+# Heat maps
+
+## All projects by taxa
+
+```{r}
+heatPhylum <- amp_heatmap(ampvis2_fam,
+            group_by = "bioreactor_model",
+            tax_aggregate = "Phylum",
+            tax_show = 10,
+            color_vector = c("white", 
+                             "#e5ba52", 
+                             "#ab7ca3", 
+                             "#9d02d7", 
+                             "#0030bf"),
+            plot_colorscale = "sqrt",
+            plot_values = TRUE,
+            showRemainingTaxa = TRUE,
+            round = 1) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10, face = "italic"),
+        legend.position="right")
+
+ggsave(
+  "heatmap_Phylum.png",
+  heatPhylum,
+  path = "./figures/heatmaps/all",
+  width = 25,
+  height = 25,
+  units = "cm"
+)
+
+heatFamily <- amp_heatmap(ampvis2_fam,
+            group_by = "bioreactor_model",
+            tax_aggregate = "Family",
+            tax_show = 40,
+            color_vector = c("white", 
+                             "#e5ba52", 
+                             "#ab7ca3", 
+                             "#9d02d7", 
+                             "#0030bf"),
+            plot_colorscale = "sqrt",
+            plot_values = TRUE,
+            showRemainingTaxa = TRUE,
+            round = 1) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10, face = "italic"),
+        legend.position="right")
+
+ggsave(
+  "heatmap_Family.png",
+  heatFamily,
+  path = "./figures/heatmaps/all",
+  width = 25,
+  height = 25,
+  units = "cm"
+)
+```
+
+## By study
+
+Producing heatmaps by study
+
+### Phylum level
+
+```{r heatmapPrjPhylum}
+loop.vector <- unique(ampvis2_fam$metadata$bioreactor_model)
+
+for (i in loop.vector){
+  
+  amp_sub <- amp_subset_samples(ampvis2_fam, 
+                                 bioreactor_model %in% i)
+  
+  heatmap <- amp_heatmap(amp_sub,
+            tax_aggregate = "Phylum",
+            tax_show = 20,
+            color_vector = c("white", 
+                             "#e5ba52", 
+                             "#ab7ca3", 
+                             "#9d02d7", 
+                             "#0030bf"),
+            plot_colorscale = "sqrt",
+            plot_values = TRUE,
+            showRemainingTaxa = TRUE) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=12),
+        legend.position="right") +
+  ggtitle(i)
+  
+  ggsave(
+    filename = paste0(
+      "./figures/heatmaps/heatmaps_by_study/phylum_level/",
+      i,
+      ".pdf"
+    ),
+    heatmap,
+    width = 40,
+    height = 25,
+    units = "cm"
+  )
+}
+```
+
+### Family level
+
+```{r heatmapPrjFamily}
+loop.vector <- unique(ampvis2_fam$metadata$bioreactor_model)
+
+for (i in loop.vector){
+  
+  amp_sub <- amp_subset_samples(ampvis2_fam, 
+                                 bioreactor_model %in% i)
+  
+  heatmap <- amp_heatmap(amp_sub,
+            tax_aggregate = "Family",
+            tax_show = 20,
+            color_vector = c("white", 
+                             "#e5ba52", 
+                             "#ab7ca3", 
+                             "#9d02d7", 
+                             "#0030bf"),
+            plot_colorscale = "sqrt",
+            plot_values = TRUE,
+            showRemainingTaxa = TRUE) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=12),
+        legend.position="right") +
+  ggtitle(i)
+  
+  ggsave(
+    filename = paste0(
+      "./figures/heatmaps/heatmaps_by_study/family_level/",
+      i,
+      ".pdf"
+    ),
+    heatmap,
+    width = 40,
+    height = 25,
+    units = "cm"
+  )
+}
+```
+
+# Ordination - non linear methods
+## t-SNE plots with compositional object
+
+```{r}
+set.seed(2)
+dst <- phyloseq::distance(ps_merge_fam_comp, method = "euclidean")
+tsne <- Rtsne(dst, is_distance = TRUE)
+tsnedata <- data.frame(tsne$Y) 
+colnames(tsnedata)[1] <- "tSNE1"
+colnames(tsnedata)[2] <- "tSNE2"
+tsnedata$bioreactor_model <- ps_merge_fam_comp@sam_data$bioreactor_model
+tsnedata$region_16S <- ps_merge_fam@sam_data$region_16S
+tsnedata$vitamins <- ps_merge_fam@sam_data$vitamins
+tsnedata$country_donor <- ps_merge_fam@sam_data$country_donor
+tsnedata$CNratio <- ps_merge_fam@sam_data$CNratio
+tsnedata$stage <- ps_merge_fam@sam_data$stage
+tsnedata$stages <- ps_merge_fam@sam_data$stages
+tsnedata$media_based_on <- ps_merge_fam@sam_data$media_based_on
+tsnedata$mucin <- ps_merge_fam@sam_data$mucin
+tsnedata$predigestion <- ps_merge_fam@sam_data$predigestion
+tsnedata$ndonor_type <- ps_merge_fam@sam_data$ndonor_type
+tsnedata$bioreactor_type <- ps_merge_fam@sam_data$bioreactor_type
+
+tsne_plot <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = bioreactor_model)) +
+  geom_point() +
+  labs(color = "Bioreactor model", shape = "Bioreactor type") +
+  theme(aspect.ratio = 1, text = element_text(size = 13)) +  
+  scale_color_manual(values = cols_model)
+
+ggsave(
+  "distance_comp_tsne_hellinger.png",
+  tsne_plot,
+  path = "./figures/tSNE",
+  width = 25,
+  height = 20,
+  units = "cm"
+)
+
+# # Interactive view to understand patterns
+# plotly::ggplotly(tsne_plot)
+
+## Facet by type to be able to visualize better
+tsne_plot2 <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = bioreactor_model)) +
+  geom_point() +
+  labs(color = "Bioreactor model") +
+  theme(aspect.ratio = 1) +  
+  scale_color_manual(values = cols_model) +
+  facet_wrap(~bioreactor_type) +
+  theme(legend.position="bottom") + guides(col = guide_legend(ncol = 4)) +
+  theme(legend.title=element_blank())
+
+ggsave(
+  "distance_comp_tsne_hellinger_facet.png",
+  tsne_plot2,
+  path = "./figures/tSNE",
+  width = 25,
+  height = 20,
+  units = "cm"
+)
+```
+
+#### Effect of additional parameters on community structure
+
+Supplementary figure 
+
+```{r}
+tsne_plot_16S <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = region_16S)) +
+  geom_point() +
+  labs(color = "16S rRNA region") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_CNratio <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = as.character(CNratio))) +
+  geom_point() +
+  labs(color = "C:N ratio") +
+  theme(aspect.ratio = 1) +
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_vitamins <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = vitamins)) +
+  geom_point() +
+  labs(color = "vitamins") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_country <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = country_donor)) +
+  geom_point() +
+  labs(color = "Country") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+## Arrange and save plot for supplementary information
+gg_arrange_1 <-
+  ggarrange(
+    tsne_plot_16S,
+    tsne_plot_CNratio,
+    tsne_plot_country,
+    tsne_plot_vitamins,
+    labels = c("A", "B", "C", "D")
+  )
+
+ggsave(
+  "distance_comp_tsne_hellinger_supp1.png",
+  gg_arrange_1,
+  path = "./figures/tSNE",
+  width = 25,
+  height = 25,
+  units = "cm"
+)
+```
+
+Supplementary figure
+
+```{r}
+tsne_plot_stage <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = as.character(stage))) +
+  geom_point() +
+  labs(color = "Stage") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_gut <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = stages)) +
+  geom_point() +
+  labs(color = "Gut compartment") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_predigestion <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = predigestion)) +
+  geom_point() +
+  labs(color = "Predigestion") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+tsne_plot_mucin <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = as.character(mucin))) +
+  geom_point() +
+  labs(color = "Mucin") +
+  theme(aspect.ratio = 1) +  
+  scale_color_viridis(discrete=TRUE)
+
+gg_arrange_2 <-
+  ggarrange(
+    tsne_plot_stage,
+    tsne_plot_gut,
+    tsne_plot_predigestion,
+    tsne_plot_mucin,
+    labels = c("A", "B", "C", "D")
+  )
+
+ggsave(
+  "distance_comp_tsne_hellinger_supp2.png",
+  gg_arrange_2,
+  path = "./figures/tSNE",
+  width = 25,
+  height = 25,
+  units = "cm"
+)
+```
+## UMAP plots with compositional object
+```{r}
+# count
+s <- get.samp(ps_merge_fam_comp)
+otu <- get.otu(ps_merge_fam_comp, as.matrix = TRUE)
+# depending on how otu table was original formatted may need to transpose
+# rows = samples and columns = otus/taxa
+otu <- t(otu)
+umap <- umap(otu)
+umapdata <- umap$layout %>%
+  data.frame() %>%
+  rownames_to_column("sample")
+colnames(umapdata)[2] <- "UMAP1"
+colnames(umapdata)[3] <- "UMAP2"
+umapdata <- left_join(umapdata, s, by = "sample")
+umap_plot <- ggplot(umapdata, aes(x = UMAP1, y = UMAP2, color = bioreactor_model)) +
+  geom_point() +
+  labs(color = "Bioreactor model", shape = "Bioreactor type") +
+  theme(aspect.ratio = 1, text = element_text(size = 13)) +  
+  scale_color_manual(values = cols_model)
+
+ggsave(
+  "distance_comp_umap_hellinger.png",
+  umap_plot,
+  path = "./figures/umap",
+  width = 25,
+  height =20,
+  units = "cm",
+  dpi = 300
+)
+
+## Facet by type to be able to visualize better
+umap_plot2 <- ggplot(umapdata, aes(x = UMAP1, y = UMAP2, color = bioreactor_model)) +
+  geom_point() +
+  labs(color = "Bioreactor model") +
+  theme(aspect.ratio = 1) +  
+  scale_color_manual(values = cols_model) +
+  facet_wrap(~bioreactor_type) +
+  theme(legend.position="bottom") + guides(col = guide_legend(ncol = 4)) +
+  theme(legend.title=element_blank())
+
+ggsave(
+  "distance_comp_umap_hellinger_facet.png",
+  umap_plot2,
+  path = "./figures/umap",
+  width = 25,
+  height = 20,
+  units = "cm"
+)
+```
+
+# Alpha diversity plots with statistical tests
+
+Create simple alpha diversity plots with count data - with separate calculation and data.frame for statistical tests
+
+## Count data - simple plot by bioreactor_model
+
+```{r}
+# group by `bioreactor_model`
+alpha_div_model <-
+  plot_richness(ps_merge_fam,
+    measures = c("Observed", "Chao1", "Shannon", "InvSimpson"))
+alpha_count_df <- alpha_div_model$data
+
+p <-
+  ggplot(alpha_count_df,
+    aes(x = bioreactor_model, y = value, fill = bioreactor_model)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.1, fill = "white") +
+  facet_wrap( ~ variable, scales = "free_y") +
+  scale_color_manual(values = cols_model)  +
+  theme(legend.position = "none",
+    axis.text.x = element_text(angle = 90, size = 8)) + xlab("") + ylab("") 
+
+ggsave(
+  "count_bioreactor_model.png",
+  p,
+  path = "./figures/alphadiv",
+  width = 25,
+  height = 15,
+  units = "cm"
+)
+
+### As there are too many pair-wise groups that are significant making a data.frame with statistical values to report in results text
+
+## Observed
+obs_results <- alpha_count_df %>% 
+  filter(variable == "Observed") %>%
+  statsExpressions::pairwise_comparisons(
+    bioreactor_model,
+    value,
+    var.equal = FALSE,
+    type = "non-parametric")
+obs_results$variable <- "Observed"
+obs_results <- obs_results %>%
+  mutate(
+    p.value.sig = case_when(
+      p.value > 0.05 ~ "n.s.",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*"
+    )
+  )
+
+## Chao1
+chao1_results <- alpha_count_df %>% 
+  filter(variable == "Chao1") %>%
+  statsExpressions::pairwise_comparisons(
+    bioreactor_model,
+    value,
+    var.equal = FALSE,
+    type = "non-parametric")
+chao1_results$variable <- "Chao1"
+chao1_results <- chao1_results %>%
+  mutate(
+    p.value.sig = case_when(
+      p.value > 0.05 ~ "n.s.",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*"
+    )
+  )
+
+## Shannon
+shan_results <- alpha_count_df %>% 
+  filter(variable == "Shannon") %>%
+  statsExpressions::pairwise_comparisons(
+    bioreactor_model,
+    value,
+    var.equal = FALSE,
+    type = "non-parametric")
+shan_results$variable <- "Shannon"
+shan_results <- shan_results %>%
+  mutate(
+    p.value.sig = case_when(
+      p.value > 0.05 ~ "n.s.",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*"
+    )
+  )
+
+## Simpson
+invsimp_results <- alpha_count_df %>% 
+  filter(variable == "InvSimpson") %>%
+  statsExpressions::pairwise_comparisons(
+    bioreactor_model,
+    value,
+    var.equal = FALSE,
+    type = "non-parametric")
+invsimp_results$variable <- "InvSimpson"
+invsimp_results <- invsimp_results %>%
+  mutate(
+    p.value.sig = case_when(
+      p.value > 0.05 ~ "n.s.",
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*"
+    )
+  )
+
+alpha_count_stats<- rbind(obs_results, chao1_results, shan_results, invsimp_results)
+alpha_count_stats$expression <- as.character(alpha_count_stats$expression)
+write.csv(alpha_count_stats, "./tables/alpha_count_stats.csv")
+
+alpha_count_stats <- read.csv("./tables/alpha_count_stats.csv", header = TRUE)
+
+alpha_count_stats_summary <- alpha_count_stats %>% 
+  filter(p.value.sig == "*" | p.value.sig == "**" | p.value.sig == "***" & variable == "Observed") %>%
+  group_by(group1, p.value.sig) %>% # Variable to be transformed
+  count() %>% 
+  group_by(group1) %>% 
+  mutate(sum(n))
+ 
+```
+
+## Count data by `bioreactor_type` - with statistical analysis on plots
+
+```{r}
+p1 <- ggstatsplot::ggbetweenstats(
+  data = dplyr::filter(alpha_count_df, variable == "Observed"),
+  x = bioreactor_type,
+  y = value,
+  type = "non-parametric", #Kruskal-Wallis
+  var.equal = FALSE, # Welch ANOVA
+  plot.type = "box",
+  results.subtitle = FALSE,
+  pairwise.comparisons = TRUE,
+  pairwise.display = "significant",
+  centrality.plotting = FALSE,
+  bf.message = FALSE,
+  # ggplot.component = list(theme(text = element_text(size = 15)))
+) +
+   scale_color_manual(values = cols_type) +
+   theme(
+     legend.position = "none",
+     axis.title.x = element_blank()
+   ) + ylab("Observed diversity")
+
+p2 <- ggstatsplot::ggbetweenstats(
+  data = dplyr::filter(alpha_count_df, variable == "Shannon"),
+  x = bioreactor_type,
+  y = value,
+   type = "non-parametric", #Kruskal-Wallis
+  var.equal = FALSE, # Welch ANOVA
+  plot.type = "box",
+  results.subtitle = FALSE,
+  pairwise.comparisons = TRUE,
+  pairwise.display = "significant",
+  centrality.plotting = FALSE,
+  bf.message = FALSE,
+) +
+   scale_color_manual(values = cols_type) +
+   theme(
+     legend.position = "none",
+     axis.title.x = element_blank()
+   ) + ylab("Shannon diversity")
+
+alpha_type <-
+  ggarrange(
+    p1,
+    p2,
+    nrow = 2
+  )
+
+ggsave(
+  "count_bioreactor_type_stats.pdf",
+  alpha_type,
+  path = "./figures/alphadiv",
+  width = 15,
+  height = 25,
+  units = "cm"
+)
+```
+
+## Count data by donor variables - with statistical analysis on plots
+
+```{r}
+p1 <- ggstatsplot::ggbetweenstats(
+  data = dplyr::filter(alpha_count_df, variable == "Shannon"),
+  x = donor,
+  y = value,
+  type = "non-parametric",
+  #Kruskal-Wallis
+  var.equal = FALSE,
+  # Welch ANOVA
+  plot.type = "box",
+  results.subtitle = TRUE,
+  pairwise.comparisons = TRUE,
+  pairwise.display = "significant",
+  centrality.plotting = FALSE,
+  bf.message = FALSE
+) +
+  scale_color_manual(values = c(rep(
+    "grey", n_distinct(alpha_count_df$donor)
+  ))) +
+  theme(legend.position = "none",
+    axis.title.x = element_blank()) + ylab("Shannon diversity")
+
+p2 <- ggstatsplot::ggbetweenstats(
+  data = dplyr::filter(alpha_count_df, variable == "Shannon"),
+  x = donor_type,
+  y = value,
+  type = "non-parametric",
+  #Kruskal-Wallis
+  var.equal = FALSE,
+  # Welch ANOVA
+  plot.type = "box",
+  results.subtitle = TRUE,
+  pairwise.comparisons = TRUE,
+  pairwise.display = "significant",
+  centrality.plotting = FALSE,
+  bf.message = FALSE
+) +
+  scale_color_manual(values = c(rep(
+    "grey", n_distinct(alpha_count_df$donor_type)
+  ))) +
+  theme(legend.position = "none",
+    axis.title.x = element_blank()) + ylab("Shannon diversity")
+
+alpha_variables <-
+  ggarrange(p1, p2,
+    nrow = 2)
+
+ggsave(
+  "count_bioreactor_donor_stats.pdf",
+  alpha_variables,
+  path = "./figures/alphadiv/",
+  width = 15,
+  height = 25,
+  units = "cm"
+)
+```
+
+Supplementary information table with alpha diversity summary
+
+```{r}
+library(kableExtra)
+
+df <- alpha_count_df %>%
+  group_by(bioreactor_model, variable) %>%
+  summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
+df <- df[order(df$variable),]
+df$mean_value <- round(df$mean_value, 2)
+df$med <- round(df$med, 2)
+df$Sdev <- round(df$Sdev, 2)
+kbl(df, caption = "Group Rows") %>%
+  kable_paper("striped", full_width = F) %>%
+  pack_rows("Group 1", 1, 19) %>%
+  pack_rows("Group 2", 20, 38) %>%
+  pack_rows("Group 3", 39, 57) %>%
+  pack_rows("Group 4", 58, 76)
+
+df <- alpha_count_df %>%
+  group_by(bioreactor_type, variable) %>%
+  summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
+df <- df[order(df$variable),]
+df$mean_value <- round(df$mean_value, 2)
+df$med <- round(df$med, 2)
+df$Sdev <- round(df$Sdev, 2)
+kbl(df, caption = "Group Rows") %>%
+  kable_paper("striped", full_width = F) %>%
+  pack_rows("Group 1", 1, 8) %>%
+  pack_rows("Group 2", 9, 16) %>%
+  pack_rows("Group 3", 17, 24) %>%
+  pack_rows("Group 4", 25, 32)
+
+df <- alpha_count_df %>%
+  group_by(donor, variable) %>%
+  summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
+df <- df[order(df$variable),]
+df$mean_value <- round(df$mean_value, 2)
+df$med <- round(df$med, 2)
+df$Sdev <- round(df$Sdev, 2)
+kbl(df, caption = "Group Rows") %>%
+  kable_paper("striped", full_width = F) %>%
+  pack_rows("Group 1", 1, 5) %>%
+  pack_rows("Group 2", 6, 10) %>%
+  pack_rows("Group 3", 11, 15) %>%
+  pack_rows("Group 4", 16, 20)
+
+df <- alpha_count_df %>%
+  group_by(donor_type, variable) %>%
+  summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
+df <- df[order(df$variable),]
+df$mean_value <- round(df$mean_value, 2)
+df$med <- round(df$med, 2)
+df$Sdev <- round(df$Sdev, 2)
+kbl(df, caption = "Group Rows") %>%
+  kable_paper("striped", full_width = F) %>%
+  pack_rows("Group 1", 1, 2) %>%
+  pack_rows("Group 2", 3, 4) %>%
+  pack_rows("Group 3", 5, 6) %>%
+  pack_rows("Group 4", 7, 8)
+```
+
+
+# Rarefaction curves
+
+Initial assessment of sequencing - one per sample with facet by the project
+
+```{r}
+rarecurve_prj <-
+  amp_rarefaction_curve(ampvis2_fam, facet_by = "bioreactor_model",
+    facet_scales = "free")
+
+
+ggsave(
+  filename = paste0("./figures/rarecurve.png"),
+  rarecurve_prj,
+  width = 40,
+  height = 25,
+  units = "cm"
+)
+```
+
+
+Statistical assessment of sequencing depth for variable (primary_id) - one per primary_id (with confidence intervals)
+
+```{r}
+# set seed
+set.seed(1)
+# set subsample
+subsamples <- seq(from = 0, to = 250000, by = 5000)
+rarecurve <- plot_alpha_rcurve(
+  ps_merge_fam,
+  index = "observed",
+  subsamples = subsamples,
+  lower.conf = 0.025,
+  upper.conf = 0.975,
+  group = "primary_id",
+  label.color = "brown3",
+  label.size = 3,
+  label.min = TRUE
+)
+# # change color of line
+# mycols <- c("brown3", "steelblue")
+# rarecurve_M <- rarecurve_M + scale_color_manual(values = mycols) +
+#   scale_fill_manual(values = mycols)
+```
+
+# Alpha diversity - Hill numbers
+
+```{r}
+library(hilldiv)
+
+otu_table <- data.frame(ps_merge_fam@otu_table)
+
+otu_table <- t(otu_table)
+
+hill_0 <- hill_div(otu_table, 0)
+hill_1 <- hill_div(otu_table, 1)
+hill_2 <- hill_div(otu_table, 2)
+hill_3 <- hill_div(otu_table, 3)
+
+hill_numbers <- data.frame(hill_0, hill_1, hill_2, hill_3)
+
+sample_data <- data.frame(ps_merge_fam@sam_data)
+
+sample_data <- data.frame(sample_data[, c(5, 10)], hill_numbers)
+
+sample_data_long <-
+  pivot_longer(sample_data,
+    cols = c(hill_0, hill_1, hill_2, hill_3),
+    names_to = "Hill_number")
+
+colnames(sample_data_long)[1] <- "bioreactor_model"
+
+sample_data_long$Hill_number  <-
+  replace(sample_data_long$Hill_number,
+    sample_data_long$Hill_number == "hill_0",
+    0)
+sample_data_long$Hill_number  <-
+  replace(sample_data_long$Hill_number,
+    sample_data_long$Hill_number == "hill_1",
+    1)
+sample_data_long$Hill_number  <-
+  replace(sample_data_long$Hill_number,
+    sample_data_long$Hill_number == "hill_2",
+    2)
+sample_data_long$Hill_number  <-
+  replace(sample_data_long$Hill_number,
+    sample_data_long$Hill_number == "hill_3",
+    3)
+
+sample_data_long$Hill_number <-
+  as.numeric(sample_data_long$Hill_number)
+
+## one figure
+hill_numbers_plot_all <-
+  sample_data_long %>%
+  ggline(
+    x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = c("mean_sd", "jitter"),
+    facet.by = "bioreactor_type"
+  ) +
+  scale_color_manual(values = cols_model)
+
+hill_numbers_plot_all <-
+  ggpar(
+    hill_numbers_plot_all,
+    legend = "bottom",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)"
+  )
+
+ggsave(
+  "hill_numbers_all_facet.svg",
+  hill_numbers_plot_all,
+  path = "./figures/alphadiv/",
+  width = 35,
+  height = 25,
+  units = "cm"
+)
+
+
+
+hill_numbers_plot_all <-
+  sample_data_long %>% ggline(x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = "mean_se")+
+  scale_color_manual(values = cols_model)
+
+hill_numbers_plot_all <-
+  ggpar(
+    hill_numbers_plot_all,
+    legend = "top",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)",
+    ylim = c(0, 40)
+  )
+
+ggsave(
+  "hill_numbers_all.png",
+  hill_numbers_plot_all,
+  path = "./figures/alphadiv/",
+  width = 35,
+  height = 20,
+  units = "cm"
+)
+
+
+## multi-panel
+hill_numbers_plot_a <-
+  sample_data_long %>% filter(
+    bioreactor_model == "batch_Kim_et_al_2022" |
+      bioreactor_model == "SHIME_Ma_et_al_2022" |
+      bioreactor_model == "batch_Korth_et_al_2022" |
+      bioreactor_model == "ARCOL_Leclerc_et_al_2021" |
+      bioreactor_model == "SHIME_Liu_et_al_2022"
+  ) %>% ggline(
+    x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = c("mean_sd", "jitter")
+  )
+
+hill_numbers_plot_a <-
+  ggpar(
+    hill_numbers_plot_a,
+    legend = "right",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)",
+    ylim = c(0, 60)
+  )
+
+hill_numbers_plot_b <-
+  sample_data_long %>% filter(
+    bioreactor_model == "batch_Bas-Bellver_et_al_2020" |
+      bioreactor_model == "batch_Kleigrewe_et_al_2022" |
+      bioreactor_model == "M-SHIME_Chassaing_et_al_2017" |
+      bioreactor_model == "M-SHIME_Abbeele_2021" |
+      bioreactor_model == "TIM-2_Vieira_et_al_2021"
+  ) %>% ggline(
+    x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = c("mean_sd", "jitter")
+  )
+
+hill_numbers_plot_b <-
+  ggpar(
+    hill_numbers_plot_b,
+    legend = "right",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)",
+    ylim = c(0, 60)
+  )
+
+hill_numbers_plot_c <-
+  sample_data_long %>% filter(
+    bioreactor_model == "SHIME_based_Gaisawat_2020" |
+      bioreactor_model == "SHIME_Firrman_et_al_2021" |
+      bioreactor_model == "TIM-2_Larsen_et_al_2019" |
+      bioreactor_model == "PolyFermS_Pham_et_al_2019" |
+      bioreactor_model == "M-ARCOL_Deschamps_et_al_2020"
+  ) %>% ggline(
+    x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = c("mean_sd", "jitter")
+  )
+
+hill_numbers_plot_c <-
+  ggpar(
+    hill_numbers_plot_c,
+    legend = "right",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)",
+    ylim = c(0, 60)
+  )
+
+hill_numbers_plot_d <-
+  sample_data_long %>% filter(
+    bioreactor_model == "batch_Elmen_et_al_2020" |
+      bioreactor_model == "single_stage_Xu_et_al_ 2019" |
+      bioreactor_model == "SIMGI_Zorraquin_et_al_2021" |
+      bioreactor_model == "Infors_Oliphant_et_al_2019"
+  ) %>% ggline(
+    x = "Hill_number",
+    y = "value",
+    color = "bioreactor_model",
+    add = c("mean_sd", "jitter")
+  )
+
+hill_numbers_plot_d <-
+  ggpar(
+    hill_numbers_plot_d,
+    legend = "right",
+    legend.title = "Model",
+    xlab = "Diversity order (q)",
+    ylab = "Diversity (Hill numbers)",
+    ylim = c(0, 60)
+  )
+
+multi_plot <-
+  ggarrange(
+    hill_numbers_plot_a,
+    hill_numbers_plot_b,
+    hill_numbers_plot_c,
+    hill_numbers_plot_d
+  )
+
+ggsave(
+  "Hill_numbers.pdf",
+  multi_plot,
+  path = "./figures/alphadiv/",
+  width = 35,
+  height = 20,
+  units = "cm"
+)
+
+double_plot <-
+  ggarrange(
+    hill_numbers_plot_all,
+    multi_plot,
+    ncol = 1,
+    nrow = 2,
+    labels = c("A", "B"),
+    common.legend = TRUE,
+    font.label = list(size = 18)
+  )
+
+ggsave(
+  "Hill_numbers_mix.pdf",
+  double_plot,
+  path = "./figures/alphadiv/",
+  width = 35,
+  height = 35,
+  units = "cm"
+)
+
+ggsave(
+  "Hill_numbers_mix.png",
+  double_plot,
+  path = "./figures/alphadiv/",
+  width = 35,
+  height = 35,
+  units = "cm",
+  dpi = 300
+)
+```
+
+# Taxonomy comparison
+
+```{r}
+taxonomyBioreactors <- as.data.frame(ps_merge_fam@tax_table)
+
+taxonomyFecal <- read.csv("./supporting_metadata/GMrepo_taxonomy.csv")
+
+taxonomyFecal <-
+  taxonomyFecal %>% 
+  mutate(phylum = ifelse(phylum %in% "Bacillota", "Firmicutes [Bacillota]", phylum)) %>% 
+  mutate(phylum = ifelse(phylum %in% "Firmicutes", "Firmicutes [Bacillota]", phylum)) %>% 
+  mutate(phylum = ifelse(phylum %in% "Actinomycetota", "Actinobacteria [Actinomycetota]", phylum)) %>% 
+  mutate(phylum = ifelse(phylum %in% "Actinobacteria", "Actinobacteria [Actinomycetota]", phylum)) %>% 
+  mutate(phylum = ifelse(phylum %in% "Pseudomonadota", "Proteobacteria [Pseudomonadota]", phylum))  %>% 
+  mutate(phylum = ifelse(phylum %in% "Proteobacteria", "Proteobacteria [Pseudomonadota]", phylum)) %>% 
+  mutate(family = ifelse(family %in% "Bacillales family X. Incertae Sedis", "Bacillales X. (i.s.)", family)) %>% 
+  mutate(family = ifelse(family %in% "Clostridiales family XVII. Incertae Sedis", "Clostridiales XVII. (i.s.)", family)) %>% 
+  mutate(family = ifelse(family %in% "Eubacteriales family XII. Incertae Sedis", "Eubacteriales XII. (i.s.)", family)) %>% 
+  mutate(family = ifelse(family %in% "Eubacteriales family XIII. Incertae Sedis", "Eubacteriales XIII. (i.s.)", family)) %>% 
+  mutate(family = ifelse(family %in% "Thermoanaerobacterales family III. Incertae Sedis", "Thermoanaerobacterales III. (i.s.)", family))
+
+bioreactor_vs_fecal <- data.frame(setdiff(taxonomyBioreactors$Family, taxonomyFecal$family))
+
+bioreactor_vs_fecal <- data.frame(bioreactor_vs_fecal[-29,])
+
+colnames(bioreactor_vs_fecal) <- "family_samples_only"
+
+fecal_vs_bioreactor <- data.frame(setdiff(taxonomyFecal$family, taxonomyBioreactors$Family))
+
+fecal_vs_bioreactor <- data.frame(fecal_vs_bioreactor[-30,])
+
+colnames(fecal_vs_bioreactor) <- "family_GM_only"
+
+for (i in 1:length(bioreactor_vs_fecal$family_samples_only))
+{
+  idx <- which(taxonomyBioreactors$Family == bioreactor_vs_fecal$family_samples_only[i])
+  
+  tempTax <- taxonomyBioreactors$Phylum[idx]
+  
+  bioreactor_vs_fecal$phylum_sample_only[i] <- tempTax
+}
+
+taxonomyFecalSummary <- taxonomyFecal %>% distinct(phylum, family)
+
+for (i in 1:length(fecal_vs_bioreactor$family_GM_only))
+{
+  idx <- which(taxonomyFecalSummary$family == fecal_vs_bioreactor$family_GM_only[i])
+  
+  tempTax <- taxonomyFecalSummary$phylum[idx]
+  
+  print(tempTax)
+  
+  fecal_vs_bioreactor$phylum_GM_only[i] <- tempTax
+}
+
+write.csv(bioreactor_vs_fecal, "./tables/bioreactor_vs_fecal.csv")
+
+write.csv(as.data.frame(fecal_vs_bioreactor), "./tables/fecal_vs_bioreactor.csv")
+
+```
+
+## Boxplots
+```{r}
+for (i in bioreactor_vs_fecal$family_samples_only)
+{
+  p <-
+  boxplot_abundance(ps_merge_fam_comp, x = "bioreactor_model", y = i) +
+  scale_y_log10() + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  theme(legend.position="bottom")
+  
+  ggsave(
+  paste0("boxplot_", i, ".pdf"),
+  p,
+  path = "./figures/boxplot",
+  width = 25,
+  height = 15,
+  units = "cm")
+}
+```
+
+## Pie charts
+
+```{r}
+phylum_GM_only <- read.csv("./tables/fecal_vs_bioreactor.csv", row.names = 1)
+
+phylum_GM_only <- phylum_GM_only %>% select(phylum_GM_only) %>% 
+  group_by(phylum_GM_only) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+
+phylum_GM_only <- phylum_GM_only[25:34,]
+
+new <- c("Other", 24, as.numeric(1-sum(phylum_GM_only$perc)), scales::percent(1-sum(phylum_GM_only$perc)))
+
+phylum_GM_only <- rbind(phylum_GM_only,new)
+
+phylum_GM_only$perc <- as.numeric(phylum_GM_only$perc)
+
+phylum_GM_only$n <- as.numeric(phylum_GM_only$n)
+
+# Get the positions
+phylum_GM_only2 <- phylum_GM_only %>% 
+  mutate(csum = rev(cumsum(rev(perc))), 
+         pos = perc/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), perc/2, pos))
+
+phylum_samples_only <- read.csv("./tables/bioreactor_vs_fecal.csv", row.names = 1)
+
+phylum_samples_only <- phylum_samples_only %>% select(phylum_sample_only) %>% 
+  group_by(phylum_sample_only) %>% # Variable to be transformed
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+
+phylum_samples_only2 <- phylum_samples_only %>% 
+  mutate(csum = rev(cumsum(rev(perc))), 
+         pos = perc/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), perc/2, pos))
+
+# plots
+
+pallete_1 <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6", "#6A3D9A", "#FFFF99")
+
+pallete_2 <- c("#CAB2D6", "#FDBF6F", "#B15928", "#d9ef8b", "#808000", "#005a32", "#FF7F00", "#1F78B4", "#FB9A99", "#6A3D9A")
+
+
+plot_phylum_GM <- ggplot(phylum_GM_only, aes(x = "" , y = perc, fill = fct_inorder(phylum_GM_only))) +
+  geom_col(width = 1, color = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = pallete_1)+
+  geom_label_repel(data = phylum_GM_only2,
+                   aes(y = pos, label = paste0(round(perc*100, digits = 1), "%")),
+                   size = 4.5, nudge_x = 1, show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Phylum")) +
+  theme_void()
+
+
+
+plot_phylum_samples <- ggplot(phylum_samples_only, aes(x = "" , y = perc, fill = fct_inorder(phylum_samples_only$phylum_sample_only))) +
+  geom_col(width = 1, color = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = pallete_2) +
+  geom_label_repel(data = phylum_samples_only2,
+                   aes(y = pos, label = paste0(round(perc*100, digits = 1), "%")),
+                   size = 4.5, nudge_x = 1, show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Phylum")) +
+  theme_void()
+
+arrange_plot <-
+  ggarrange(
+    plot_phylum_samples,
+    plot_phylum_GM,
+    ncol = 1,
+    nrow = 2,
+    labels = c("A.", "B."),
+    common.legend = FALSE,
+    legend = "bottom"
+  )
+
+ggsave(
+  "taxonomy_compare.pdf",
+  arrange_plot,
+  path = "./figures/pie_charts",
+  width = 35,
+  height = 25,
+  units = "cm"
+)
+```

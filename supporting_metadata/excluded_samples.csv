@@ -1,0 +1,80 @@
+bioreactor_model,primary_id,run_id,include_sample,sample_name_other,reason_sample_exclusion
+SHIME_Firrman_et_al_2021,SRP290868,SRR12968042,no,ORIDay0,fecal material
+SHIME_Firrman_et_al_2021,SRP290868,SRR12968087,no,V1.inoculum.1,fecal material
+polyferms_Pham_et_al_2019,ERP114897,ERR3327125,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327126,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327127,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327128,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327144,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327145,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327146,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327147,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327168,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327169,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327170,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327183,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327184,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327185,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327186,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327211,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327215,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327218,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327221,no,TR2,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327148,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327149,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327150,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327151,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327171,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327172,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327173,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327174,no,TR3,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327129,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327130,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327152,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327153,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327154,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327155,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327175,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327176,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327177,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327178,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327191,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327193,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327194,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327195,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327212,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327216,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327219,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327222,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327226,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327229,no,TR4,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327179,no,MOCKcommunity,external bacteria
+polyferms_Pham_et_al_2019,ERP114897,ERR3327180,no,Positivecontrol,external bacteria
+ARCOL_Leclerc_et_al_2021,SRP309452,SRR13863484,no,FM2_donor,fecal material
+ARCOL_Leclerc_et_al_2021,SRP309452,SRR13863485,no,FM1_donor,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541381,no,neg-3,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541382,no,neg-2,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541383,no,neg-1,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541384,no,neg-0,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541385,no,neg-b,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541386,no,neg-a,negative control
+SHIME_based_Baasir_2020,SRP279236,SRR12541476,no,0.V3.A,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541475,no,0.V3.B,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541464,no,0.V4.A,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541453,no,0.V4.B,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541442,no,0.V5.A,fecal material
+SHIME_based_Baasir_2020,SRP279236,SRR12541431,no,0.V5.B,fecal material
+SIMGI_Zorraquin_et_al_2021,SRP320497,SRR14585829,no,C0h,fecal material
+SIMGI_Zorraquin_et_al_2021,SRP320497,SRR14585826,no,CDW0h,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036840,no,Donor B - Control_0h_replicate,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036845,no,Donor B- Control_0h,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036849,no,Donor A - Control_0h_replicate,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036855,no,Donor C - Control_0h_replicate,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036828,no,Donor D - Control_0h_replicate,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036831,no,Donor D - Control_0h,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036836,no,Donor C - Control_0h,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036848,no,Donor F - Control_0h_replicate,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036852,no,Donor F - Control_0h,fecal material
+SHIME_Liu_et_al_2022,SRP359931,SRR18036853,no,Donor A - Control_0h,fecal material
+M-ARCOL_Deschamps_et_al_2020,SRP266568,SRR11962962,no,P2FECES,fecal material
+M-ARCOL_Deschamps_et_al_2020,SRP266568,SRR11963015,no,P1FECES,fecal material

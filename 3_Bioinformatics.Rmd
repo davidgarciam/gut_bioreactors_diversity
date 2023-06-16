@@ -1,0 +1,2115 @@
+---
+title: "Bioinformatics"
+author: "davidgarciam"
+output: html_document
+date: '2022-10-07'
+---
+
+#Libraries
+```{r}
+install.packages("librarian")
+
+librarian::shelf("dada2", "ggplot2")
+```
+
+#Create output folders
+```{r}
+dir.create(path = "./outputFiles/reports/plotQualityProfile", recursive = TRUE)
+
+dir.create(path = "./outputFiles/filterout")
+
+dir.create(path = "./outputFiles/reports/plotErrors")
+
+dir.create(path = "./outputFiles/seqtab")
+```
+
+
+#ERP021273
+```{r}
+path <- "./raw_sequences/ERP021273"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = ".fastq.gz", full.names = TRUE))
+
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:2], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP021273_forward.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+names(filtFs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  truncLen = c(250), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = 0,
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 3,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP021273_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP021273.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(dadaFs)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP021273_seqtab.csv")
+```
+
+#ERP107582
+```{r}
+path <- "./raw_sequences/ERP107582"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP107582_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP107582_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(150, 150), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP107582_filterout.csv")
+```
+Compare raw seq files to filtered
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP107582_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP107582_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP107582_seqtab.csv")
+```
+
+#ERP108433
+```{r}
+path <- "./raw_sequences/ERP108433"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP108433_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP108433_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP108433_filterout.csv")
+```
+Compare raw seq files to filtered
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP108433_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP108433_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP108433_seqtab.csv")
+```
+#ERP114897
+```{r}
+path <- "./raw_sequences/ERP114897"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP114897_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP114897_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP114897_filterout.csv")
+```
+Compare raw seq files to filtered
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP114897_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP114897_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP114897_seqtab.csv")
+```
+#ERP120273
+```{r}
+path <- "./raw_sequences/ERP120273"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP120273_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP120273_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(270, 250), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP120273_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP120273_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP120273_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP120273_seqtab.csv")
+```
+#ERP124577
+```{r}
+path <- "./raw_sequences/ERP124577"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP124577_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/ERP124577_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(250, 210), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 2),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/ERP124577_filterout.csv")
+```
+Compare raw seq files to filtered
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP124577_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/ERP124577_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/ERP124577_seqtab.csv")
+```
+#SRP164695
+```{r}
+path <- "./raw_sequences/SRP164695"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP164695_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP164695_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(200, 200), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP164695_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP164695_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP164695_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP164695_seqtab.csv")
+```
+#SRP186729
+
+```{r}
+path <- "./raw_sequences/SRP186729"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP186729_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP186729_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(200, 190), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP186729_filterout.csv")
+```
+
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP186729_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP186729_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP186729_seqtab.csv")
+```
+#SRP247849
+```{r}
+path <- "./raw_sequences/SRP247849"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP247849_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP247849_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(280, 280), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+tail(out)
+
+write.csv(out, file = "./outputFiles/filterout/SRP247849_filterout.csv")
+```
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP247849_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP247849_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP247849_seqtab.csv")
+```
+#SRP221446
+```{r}
+path <- "./raw_sequences/SRP221446"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP221446_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/PlotQualityProfile/SRP221446_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(4, 4),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP221446_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP221446_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP221446_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP221446_seqtab.csv")
+```
+#SRP241247
+
+```{r}
+path <- "./raw_sequences/SRP241247"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP241247_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP241247_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP241247_filterout.csv")
+```
+
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP241247_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP241247_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP241247_seqtab.csv")
+```
+#SRP187837
+```{r}
+path <- "./raw_sequences/SRP187837"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP187837_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP187837_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(300, 270), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(3, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP187837_filterout.csv")
+```
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP187837_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP187837_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP187837_seqtab.csv")
+```
+#SRP263049
+```{r}
+path <- "./outputFiles/raw_sequences/SRP263049"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP263049_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP263049_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 205), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP263049_filterout.csv")
+```
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP263049_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP263049_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP263049_seqtab.csv")
+```
+#SRP279236
+
+```{r}
+path <- "./raw_sequences/SRP279236"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP279236_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP279236_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 205), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+tail(out)
+write.csv(out, file = "./outputFiles/./filterout/SRP279236_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP279236_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP279236_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errF, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP279236_seqtab.csv")
+```
+#SRP287447
+```{r}
+path <- "./outputFiles/raw_sequences/SRP287447"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP287447_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP287447_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 230), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(2, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP287447_filterout.csv")
+```
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP287447_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP287447_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP287447_seqtab.csv")
+```
+#SRP290868
+
+```{r}
+path <- "./raw_sequences/SRP290868"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:5], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP290868_forward.pdf")
+
+plotQualityProfile(fnRs[1:5], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP290868_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP290868_filterout.csv")
+```
+
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP290868_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP290868_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP290868_seqtab.csv")
+```
+#SRP307470
+
+```{r}
+path <- "./raw_sequences/SRP307470"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = ".fastq.gz", full.names = TRUE))
+
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:2], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP307470_forward.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+names(filtFs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  truncLen = c(250), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = 0,
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 3,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP307470_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP307470.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(dadaFs)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP307470_seqtab.csv")
+```
+#SRP309452
+
+```{r}
+path <- "./raw_sequences/SRP309452"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP309452_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP309452_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(250, 210), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(3, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP309452_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP309452_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP309452_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP309452_seqtab.csv")
+```
+#SRP320497
+```{r}
+path <- "./raw_sequences/SRP320497"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP320497_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP320497_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(250, 210), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 2,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP320497_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP320497_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP320497_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP320497_seqtab.csv")
+```
+#SRP359931
+
+```{r}
+path <- "./raw_sequences/SRP359931"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP359931_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP359931_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(250, 250), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP359931_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP359931_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP359931_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP359931_seqtab.csv")
+```
+#SRP369790
+
+```{r}
+path <- "./raw_sequences/SRP369790"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP369790_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP369790_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP369790_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP369790_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP369790_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP369790_seqtab.csv")
+```
+#SRP370478
+```{r}
+path <- "./raw_sequences/SRP370478"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP370478_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP370478_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(240, 210), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(4, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP370478_filterout.csv")
+```
+
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP370478_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP370478_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/./seqtab/SRP370478_seqtab.csv")
+```
+#SRP373954
+
+```{r}
+path <- "./raw_sequences/SRP373954"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP373954_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP373954_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(280, 200), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(5, 5),
+  # max numbe]r of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP373954_filterout.csv")
+```
+```{r}
+list1 <- list.files(path, pattern = "fastq.gz", full.names = TRUE)
+list.names1 <- sapply(strsplit(list1, "/"), function(x) paste(x[4], sep = "_"))
+list.names1 <- sapply(strsplit(list.names1, "_"), function(x) paste(x[1], sep = "_"))
+list2 <- list.files(paste0(path, "/filtered"), pattern = "fastq.gz", full.names = TRUE)
+list.names2 <- sapply(strsplit(list2, "/"), function(x) paste(x[5], sep = "_"))
+list.names2 <- sapply(strsplit(list.names2, "_"), function(x) paste(x[1], sep = "_"))
+# display difference between folders
+exc <- setdiff(list.names1, list.names2)
+exc
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP373954_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP373954_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP373954_seqtab.csv")
+```
+#SRP383204
+
+```{r}
+path <- "./raw_sequences/SRP383204"
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path, pattern = "_1.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern = "_2.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+
+plotQualityProfile(fnFs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP383204_forward.pdf")
+
+plotQualityProfile(fnRs[1:10], aggregate = TRUE)
+
+ggsave("./outputFiles/reports/PlotQualityProfile/SRP383204_reverse.pdf")
+```
+
+Setting the path for where filtered reads will go
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+```
+
+Filter and trim
+```{r}
+# forward primer:
+# reverse primer:
+# basic trim/filter basics on fastQC plot
+out <- filterAndTrim(
+  fnFs,
+  filtFs,
+  fnRs,
+  filtRs,
+  truncLen = c(245, 240), # length of sequence that is good quality keeps only sequences that are >250
+  trimLeft = c(0, 0),
+  # if we know primer we can primer we can remove that number of base pairs
+  maxN = 0,
+  # how many N base pair (i.e. can't decide)
+  maxEE = c(4, 5),
+  # max number of expected error, 2 is default, sometimes we need to increase for reverse reads or poor quality reads
+  truncQ = 2,
+  # Truncate reads at the first instance of a quality score less than or equal to truncQ.
+  rm.phix = TRUE,
+  # removing the spiked in PhiX (control sequence)
+  compress = TRUE,
+  multithread = TRUE
+)
+head(out)
+write.csv(out, file = "./outputFiles/filterout/SRP383204_filterout.csv")
+```
+
+Learn error (96 samples ~ 5 mins)
+```{r}
+errF <- learnErrors(filtFs, multithread = TRUE)
+plotErrors(errF, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP383204_forward.pdf")
+
+errR <- learnErrors(filtRs, multithread = TRUE)
+plotErrors(errR, nominalQ = TRUE)
+ggsave("./outputFiles/reports/plotErrors/SRP383204_reverse.pdf")
+```
+
+Denoising
+```{r}
+dadaFs <- dada(filtFs, err = errF, multithread = TRUE)
+
+dadaRs <- dada(filtRs, err = errR, multithread = TRUE)
+```
+
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE)
+```
+
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+write.csv(seqtab, "./outputFiles/seqtab/SRP383204_seqtab.csv")
+```

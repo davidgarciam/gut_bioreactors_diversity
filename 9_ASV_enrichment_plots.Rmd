@@ -1,0 +1,299 @@
+---
+title: "Enrichment plots"
+output: html_document
+date: "2023-02-17"
+---
+
+# Load packages
+
+```{r}
+library(tidyverse)
+library(UpSetR)
+library(tools)
+library(ggplot2)
+```
+
+#Create output folder
+```{r}
+dir.create(path = "./figures/enrichment/")
+```
+
+# ARCOL_Leclerc_et_al_2021
+
+```{r}
+asv_list_files <-
+  list.files(
+    "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/",
+    full.names = TRUE
+  )
+asv_sample_id <-
+  file_path_sans_ext(
+    list.files(
+      "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/"
+    )
+  )
+csv <- lapply(asv_list_files, read.csv)
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+colnames(project_table) <- gsub("ARCOL_", "", colnames(project_table))
+sampleNames <- colnames(project_table)[2:length(project_table)]
+
+# convert to presence/absence data.frame (i.e. >)
+project_table[is.na(project_table)] <- 0
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+idx_2 <-
+  data.frame(which(project_table[, 2:7] != 0, arr.ind = TRUE))
+row_id_2 <- data.frame(table(idx_2$row))
+row_id_2 <- row_id_2 %>% filter(Freq > 2)
+row_id_2$Var1 <- as.numeric(as.character(row_id_2$Var1))
+key_asv <- project_table[row_id_2$Var1, ]
+
+upset1 <- upset(
+  project_table,
+  sets = sampleNames,
+  sets.bar.color = "#7a255d",
+  keep.order = T,
+  text.scale = 1.5,
+  mainbar.y.label = "Number of enriched ASVs"
+)
+
+pdf(
+  paste0(
+    "./figures/enrichment/ARCOL_Leclerc_et_al_2021.pdf"
+  ),
+  height = 5,
+  width = 5
+)
+upset1
+dev.off()
+```
+
+# M-ARCOL_Deschamps_et_al_2020
+
+```{r}
+asv_list_files <-
+  list.files(
+    "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/",
+    full.names = TRUE
+  )
+asv_sample_id <-
+  file_path_sans_ext(
+    list.files(
+      "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/"
+    )
+  )
+csv <- lapply(asv_list_files, read.csv)
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+colnames(project_table) <-
+  gsub("M-ARCOL_", "", colnames(project_table))
+sampleNames <- colnames(project_table)[2:length(project_table)]
+
+# convert to presence/absence data.frame (i.e. >)
+project_table[is.na(project_table)] <- 0
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+idx_2 <- data.frame(which(project_table[, 2:7] != 0, arr.ind = TRUE))
+row_id_2 <- data.frame(table(idx_2$row))
+row_id_2 <- row_id_2 %>% filter(Freq > 3)
+row_id_2$Var1 <- as.numeric(as.character(row_id_2$Var1))
+key_asv <- project_table[row_id_2$Var1, ]
+
+upset2 <- upset(
+  project_table,
+  sets = sampleNames,
+  sets.bar.color = "#7a255d",
+  keep.order = T,
+  text.scale = 1.5,
+  mainbar.y.label = "Number of enriched ASVs"
+)
+
+pdf(
+  paste0(
+    "./figures/enrichment/M-ARCOL_Deschamps_et_al_2020.pdf"
+  ),
+  height = 5,
+  width = 6
+)
+upset2
+dev.off()
+```
+
+# SHIME_Firrman_et_al_2021
+
+```{r}
+asv_list_files <-
+  list.files(
+    "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021",
+    full.names = TRUE
+  )
+asv_sample_id <-
+  file_path_sans_ext(
+    list.files(
+      "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021"
+    )
+  )
+csv <- lapply(asv_list_files, read.csv)
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+colnames(project_table) <- gsub("SHIME_Firrman_", "", colnames(project_table))
+sampleNames <- colnames(project_table)[2:length(project_table)]
+
+# convert to presence/absence data.frame (i.e. >)
+project_table[is.na(project_table)] <- 0
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+idx_2 <- data.frame(which(project_table[, 2:11] != 0, arr.ind = TRUE))
+row_id_2 <- data.frame(table(idx_2$row))
+row_id_2 <- row_id_2 %>% filter(Freq > 3)
+row_id_2$Var1 <- as.numeric(as.character(row_id_2$Var1))
+key_asv <- project_table[row_id_2$Var1, ]
+
+upset3 <- upset(
+  project_table,
+  sets = sampleNames,
+  sets.bar.color = "#7a255d",
+  keep.order = T,
+  text.scale = 1.5,
+  mainbar.y.label = "Number of enriched ASVs"
+)
+
+pdf(
+  paste0(
+    "./figures/enrichment/SHIME_Firrman_et_al_2021.pdf"
+  ),
+  height = 5,
+  width = 7
+)
+upset3
+dev.off()
+```
+
+# SHIME_Liu_et_al_2022
+
+```{r}
+asv_list_files <-
+  list.files(
+    "./tables/enrichment_analysis/SHIME_Liu_et_al_2022",
+    full.names = TRUE
+  )
+asv_sample_id <-
+  file_path_sans_ext(
+    list.files(
+      "./tables/enrichment_analysis/SHIME_Liu_et_al_2022"
+    )
+  )
+csv <- lapply(asv_list_files, read.csv)
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+colnames(project_table) <- gsub("SHIME_", "", colnames(project_table))
+sampleNames <- colnames(project_table)[2:length(project_table)]
+
+# convert to presence/absence data.frame (i.e. >)
+project_table[is.na(project_table)] <- 0
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+idx_2 <- data.frame(which(project_table[, 2:11] != 0, arr.ind = TRUE))
+row_id_2 <- data.frame(table(idx_2$row))
+row_id_2 <- row_id_2 %>% filter(Freq > 3)
+row_id_2$Var1 <- as.numeric(as.character(row_id_2$Var1))
+key_asv <- project_table[row_id_2$Var1, ]
+
+upset4 <- upset(
+  project_table,
+  sets = sampleNames,
+  sets.bar.color = "#7a255d",
+  keep.order = T,
+  text.scale = 1.5,
+  mainbar.y.label = "Number of enriched ASVs"
+)
+
+pdf(
+  paste0("./figures/enrichment/SHIME_Liu_et_al_2022.pdf"),
+  height = 5,
+  width = 7
+)
+upset4
+dev.off()
+```
+
+# SIMGI_Zorraquin_et_al_2021
+
+```{r}
+asv_list_files <-
+  list.files(
+    "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/",
+    full.names = TRUE
+  )
+asv_sample_id <-
+  file_path_sans_ext(
+    list.files(
+      "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021"
+    )
+  )
+csv <- lapply(asv_list_files, read.csv)
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+colnames(project_table) <- gsub("SIMGI_", "", colnames(project_table))
+sampleNames <- colnames(project_table)[2:length(project_table)]
+# convert to presence/absence data.frame (i.e. >)
+project_table[is.na(project_table)] <- 0
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+idx_2 <- data.frame(which(project_table[, 2:5] != 0, arr.ind = TRUE))
+row_id_2 <- data.frame(table(idx_2$row))
+row_id_2 <- row_id_2 %>% filter(Freq > 1)
+row_id_2$Var1 <- as.numeric(as.character(row_id_2$Var1))
+key_asv <- project_table[row_id_2$Var1, ]
+
+upset5 <- upset(
+  project_table,
+  sets = sampleNames,
+  sets.bar.color = "#7a255d",
+  keep.order = T,
+  text.scale = 1.5,
+  mainbar.y.label = "Number of enriched ASVs"
+)
+
+pdf(
+  paste0(
+    "./figures/enrichment/SIMGI_Zorraquin_et_al_2021.pdf"
+  ),
+  height = 5,
+  width = 5
+)
+upset5
+dev.off()
+```

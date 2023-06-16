@@ -1,0 +1,488 @@
+---
+title: "ASVs_enrichment_analysis"
+author: "David Garcia"
+date: '2023-02-06'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r results='hide'}
+# libraries
+pkgs <- c(
+  "tidyverse",
+  "phyloseq",
+  "ggpubr",
+  "ggplot2",
+  "vegan",
+  "reshape2",
+  "plotly",
+  "ampvis2",
+  "microbiomeutilities",
+  "RColorBrewer",
+  "viridis",
+  "biomeUtils",
+  "microViz",
+  "microbiome",
+  "janitor"
+)
+lapply(pkgs, require, character.only = TRUE)
+theme_set(theme_bw())
+```
+
+#Create output folders
+```{r}
+dir.create(path = "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020", recursive = TRUE)
+dir.create(path = "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021")
+dir.create(path = "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021")
+dir.create(path = "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021")
+dir.create(path = "./tables/enrichment_analysis/SHIME_Liu_et_al_2022")
+```
+
+# M-ARCOL_Deschamps_et_al_2020
+
+## ASVs driven analysis
+
+### Load data
+
+```{r}
+load("./RData/primary_id/ps_SRP266568.Rda")
+
+asv_table <- data.frame(ps@otu_table)
+
+asv_table <- t(asv_table) |> data.frame()
+```
+
+### Filter data from donor 1
+```{r}
+# Filter data from donor 1
+
+asv_table_donor_1 <- asv_table %>% select(SRR11963015, SRR11962989, SRR11962990)
+
+# Identify ASVs in faecal sample
+
+asv_table_donor_1_faecal <- asv_table_donor_1 %>%
+  filter(SRR11963015 > 0) %>%
+  select(SRR11963015)
+
+write.csv(asv_table_donor_1_faecal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_1_faecal.csv")
+
+# Identify the enriched ASVs in lumenal samples
+
+asv_table_donor_1_lumenal <- asv_table_donor_1 %>%
+  filter(SRR11963015 == 0 & SRR11962989 > 0) %>%
+  select(SRR11962989)
+
+# Identify the enriched ASVs in mucin beads samples
+
+asv_table_donor_1_mucosal <- asv_table_donor_1 %>%
+  filter(SRR11963015 == 0 & SRR11962990 > 0) %>%
+  select(SRR11962990)
+```
+### Export to csv files
+
+```{r}
+write.csv(asv_table_donor_1_faecal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_1_faecal.csv")
+
+write.csv(asv_table_donor_1_lumenal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_1_lumenal.csv")
+
+write.csv(asv_table_donor_1_mucosal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_1_mucosal.csv")
+```
+
+### Filter data from donor 2
+```{r}
+# Filter_data_from_donor_2
+
+asv_table_donor_2 <- asv_table %>% select(SRR11962962, SRR11963062, SRR11963063)
+
+# Identify ASVs in faecal sample
+
+asv_table_donor_2_faecal <- asv_table_donor_2 %>%
+  filter(SRR11962962 > 0) %>%
+  select(SRR11962962)
+
+# Identify the enriched ASVs in lumenal samples
+
+asv_table_donor_2_lumenal <- asv_table_donor_2 %>%
+  filter(SRR11962962 == 0 & SRR11963062 > 0) %>%
+  select(SRR11963062)
+
+# Identify the enriched ASVs in mucin beads samples
+
+asv_table_donor_2_mucosal <- asv_table_donor_2 %>%
+  filter(SRR11962962 == 0 & SRR11963063 > 0) %>%
+  select(SRR11963063)
+```
+### Export to csv files
+
+```{r}
+write.csv(asv_table_donor_2_faecal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_2_faecal.csv")
+
+write.csv(asv_table_donor_2_lumenal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_2_lumenal.csv")
+
+write.csv(asv_table_donor_2_mucosal, "./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/M-ARCOL_donor_2_mucosal.csv")
+```
+
+# SHIME_Firrman_et_al_2021
+
+## ASVs driven analysis
+
+### Load data
+```{r}
+load("./RData/primary_id/ps_SRP290868.Rda")
+
+asv_table <- data.frame(ps@otu_table)
+
+asv_table <- t(asv_table) |> data.frame()
+
+selected_samples <- c("SRR12968038", "SRR12968039", "SRR12968045", "SRR12968047", "SRR12968049", "SRR12968051", "SRR12968054", "SRR12968056", "SRR12968043", "SRR12968046", "SRR12968048", "SRR12968050", "SRR12968052", "SRR12968055", "SRR12968084", "SRR12968085", "SRR12968042", "SRR12968087")
+
+asv_table <- asv_table %>% select(all_of(selected_samples))
+```
+
+### Analysis by restriction (pick ASVs absent in faecal samples and present in both bioreactor replicates)
+
+### Filter data from single stage bioreactor
+
+```{r}
+asv_table_single_stage <- asv_table %>% select(SRR12968087, SRR12968038, SRR12968039, SRR12968084, SRR12968085)
+
+# Identify ASVs in faecal sample
+
+fecal_single_stage <- asv_table_single_stage %>%
+  select(SRR12968087) %>%
+  filter(SRR12968087 > 0)
+
+# Identify ASV in lumenal samples
+
+lumenal_single <- asv_table_single_stage %>%
+  filter(SRR12968087 == 0 & SRR12968038 > 0 & SRR12968039 > 0) %>%
+  select(SRR12968038)
+
+mucosal_single <- asv_table_single_stage %>%
+  filter(SRR12968087 == 0 & SRR12968084 > 0 & SRR12968085 > 0) %>%
+  select(SRR12968084)
+```
+### Export to csv file
+
+```{r}
+write.csv(fecal_single_stage, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_single_stage_faecal.csv")
+
+write.csv(lumenal_single, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_single_lumenal.csv")
+
+write.csv(mucosal_single, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_single_mucosal.csv")
+```
+
+### Filter data from multi stage bioreactor
+
+```{r}
+asv_table_multi_stage <- asv_table %>% select(SRR12968042, SRR12968045, SRR12968047, SRR12968049, SRR12968051, SRR12968054, SRR12968056, SRR12968048, SRR12968050, SRR12968043, SRR12968046, SRR12968052, SRR12968055)
+
+faecal_multi_stage <- asv_table_multi_stage %>%
+  select(SRR12968042) %>%
+  filter(SRR12968042 > 0)
+
+lumenal_dc <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968045 > 0 & SRR12968047 > 0) %>%
+  select(SRR12968045)
+
+lumenal_tc <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968049 > 0 & SRR12968051 > 0) %>%
+  select(SRR12968049)
+
+lumenal_ac <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968054 > 0 & SRR12968056 > 0) %>%
+  select(SRR12968054)
+
+mucosal_dc <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968048 > 0 & SRR12968050 > 0) %>%
+  select(SRR12968048)
+
+mucosal_tc <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968043 > 0 & SRR12968046 > 0) %>%
+  select(SRR12968043)
+
+mucosal_ac <- asv_table_multi_stage %>%
+  filter(SRR12968042 == 0 & SRR12968052 > 0 & SRR12968055 > 0) %>%
+  select(SRR12968052)
+```
+### Export to csv file
+
+```{r}
+write.csv(faecal_multi_stage, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_stage_faecal.csv")
+
+write.csv(lumenal_tc, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_lumenal_tc.csv")
+
+write.csv(lumenal_dc, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_lumenal_dc.csv")
+
+write.csv(lumenal_ac, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_lumenal_ac.csv")
+
+write.csv(mucosal_tc, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_mucosal_tc.csv")
+
+write.csv(mucosal_dc, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_mucosal_dc.csv")
+
+write.csv(mucosal_ac, "./tables/enrichment_analysis/SHIME_Firrman_et_al_2021/SHIME_Firrman_multi_mucosal_ac.csv")
+```
+
+# ARCOL_Leclerc_et_al_2021
+## ASVs driven analysis
+
+### Load data
+```{r}
+load("./RData/primary_id/ps_SRP309452.Rda")
+
+asv_table <- data.frame(ps@otu_table)
+
+asv_table <- t(asv_table) |> data.frame()
+```
+### Filter data from donor 1
+```{r}
+# Filter data from donor 1
+
+asv_table_donor_1 <- asv_table %>% select(SRR13863485, SRR13863481, SRR13863469)
+
+# Identify ASVs in faecal sample
+
+asv_table_donor_1_faecal <- asv_table_donor_1 %>%
+  filter(SRR13863485 > 0) %>%
+  select(SRR13863485)
+
+# Identify the enriched ASVs in lumenal samples
+
+asv_table_donor_1_tto_a <- asv_table_donor_1 %>%
+  filter(SRR13863485 == 0 & SRR13863481 > 0) %>%
+  select(SRR13863481)
+
+# Identify the enriched ASVs in mucin beads samples
+
+asv_table_donor_1_tto_b <- asv_table_donor_1 %>%
+  filter(SRR13863485 == 0 & SRR13863469 > 0) %>%
+  select(SRR13863469)
+```
+
+### Export to csv files
+
+```{r}
+write.csv(asv_table_donor_1_faecal, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_1_faecal.csv")
+
+write.csv(asv_table_donor_1_tto_a, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_1_tto_a.csv")
+
+write.csv(asv_table_donor_1_tto_b, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_1_tto_b.csv")
+```
+
+### Filter data from donor 2
+```{r}
+# Filter_data_from_donor_2
+
+asv_table_donor_2 <- asv_table %>% select(SRR13863484, SRR13863457, SRR13863445)
+
+# Identify ASVs in faecal sample
+
+asv_table_donor_2_faecal <- asv_table_donor_2 %>%
+  filter(SRR13863484 > 0) %>%
+  select(SRR13863484)
+
+# Identify the enriched ASVs in lumenal samples
+
+asv_table_donor_2_tto_a <- asv_table_donor_2 %>%
+  filter(SRR13863484 == 0 & SRR13863457 > 0) %>%
+  select(SRR13863457)
+
+# Identify the enriched ASVs in mucin beads samples
+
+asv_table_donor_2_tto_b <- asv_table_donor_2 %>%
+  filter(SRR13863484 == 0 & SRR13863445 > 0) %>%
+  select(SRR13863445)
+```
+
+### Export to csv files
+
+```{r}
+write.csv(asv_table_donor_2_faecal, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_2_faecal.csv")
+
+write.csv(asv_table_donor_2_tto_a, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_2_tto_a.csv")
+
+write.csv(asv_table_donor_2_tto_b, "./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/ARCOL_donor_2_tto_b.csv")
+```
+# SIMGI_Zorraquin_et_al_2021
+## ASVs driven analysis
+
+### Load data
+```{r}
+load("./RData/primary_id/ps_SRP320497.Rda")
+
+asv_table <- data.frame(ps@otu_table)
+
+asv_table <- t(asv_table) |> data.frame()
+```
+
+### Filter data from control
+```{r}
+# Filter data from donor 1
+
+asv_table_control <- asv_table %>% select(SRR14585829, SRR14585827)
+
+# Identify ASVs in faecal sample
+
+asv_table_control_faecal <- asv_table_control %>%
+  filter(SRR14585829 > 0) %>%
+  select(SRR14585829)
+
+# Identify ASVs after fermentation with colon nutrient medium
+
+asv_table_control_48h <- asv_table_control %>%
+  filter(SRR14585829 == 0 & SRR14585827 > 0) %>%
+  select(SRR14585827)
+```
+
+### Export to csv files
+
+```{r}
+write.csv(asv_table_control_faecal, "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/SIMGI_control_faecal.csv")
+
+write.csv(asv_table_control_48h, "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/SIMGI_control_48h.csv")
+```
+
+### Filter data from treated samples (Digested wine - DW)
+```{r}
+# Filter_data_from_faecal sample and DW
+
+asv_table_DW <- asv_table %>% select(SRR14585826, SRR14585824)
+
+# Identify ASVs after fermentation with colon nutrient medium
+
+asv_table_DW_faecal <- asv_table_DW %>%
+  filter(SRR14585826 > 0) %>%
+  select(SRR14585826)
+
+# Identify ASVs after fermentation with DW
+
+asv_table_DW_48h <- asv_table_DW %>%
+  filter(SRR14585826 == 0 & SRR14585824 > 0) %>%
+  select(SRR14585824)
+```
+
+### Export to csv files
+
+```{r}
+write.csv(asv_table_DW_faecal, "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/SIMGI_DW_faecal.csv")
+
+write.csv(asv_table_DW_48h, "./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/SIMGI_DW_48h.csv")
+```
+
+# SHIME_Liu_et_al_2022
+## ASVs driven analysis
+### Load data
+```{r}
+load("./RData/primary_id/ps_SRP359931.Rda")
+
+asv_table <- data.frame(ps@otu_table)
+
+asv_table <- t(asv_table) |> data.frame()
+
+selected_samples <- c(
+  "SRR18036853", "SRR18036849", "SRR18036844", "SRR18036839",
+  "SRR18036845", "SRR18036840", "SRR18036830", "SRR18036827",
+  "SRR18036836", "SRR18036855", "SRR18036842", "SRR18036838",
+  "SRR18036831", "SRR18036828", "SRR18036829", "SRR18036826",
+  "SRR18036852", "SRR18036848", "SRR18036841", "SRR18036837"
+)
+
+asv_table <- asv_table %>% select(all_of(selected_samples))
+
+# Donor A
+# Control (SRR18036853) Control_replicate (SRR18036849) Control 48h (SRR18036844) Control 48h replicate (SRR18036839)
+
+# Donor B
+# Control (SRR18036845) Control_replicate (SRR18036840) Control 48h (SRR18036830) Control 48h replicate (SRR18036827)
+
+# Donor C
+# Control (SRR18036836) Control_replicate (SRR18036855) Control 48h (SRR18036842) Control 48h replicate (SRR18036838)
+
+# Donor D
+# Control (SRR18036831) Control_replicate (SRR18036828) Control 48h (SRR18036829) Control 48h replicate (SRR18036826)
+
+# Donor F
+# Control (SRR18036852) Control_replicate (SRR18036848) Control 48h (SRR18036841) Control 48h replicate (SRR18036837)
+```
+### Analysis by restriction
+### Filter data from control samples and all donors
+
+```{r}
+donor_a_faecal <- asv_table %>%
+  select(SRR18036853, SRR18036849) %>%
+  filter(SRR18036853 > 0 & SRR18036849 > 0) %>%
+  select(SRR18036853)
+
+donor_a_enriched <- asv_table %>%
+  select(SRR18036853, SRR18036849, SRR18036844, SRR18036839) %>%
+  filter(SRR18036853 == 0 & SRR18036849 == 0 & SRR18036844 > 0 & SRR18036839 > 0) %>%
+  select(SRR18036839)
+
+donor_b_faecal <- asv_table %>%
+  select(SRR18036845, SRR18036840) %>%
+  filter(SRR18036845 > 0 & SRR18036840 > 0) %>%
+  select(SRR18036845)
+
+donor_b_enriched <- asv_table %>%
+  select(SRR18036845, SRR18036840, SRR18036830, SRR18036827) %>%
+  filter(SRR18036845 == 0 & SRR18036840 == 0 & SRR18036830 > 0 & SRR18036827 > 0) %>%
+  select(SRR18036827)
+
+donor_c_faecal <- asv_table %>%
+  select(SRR18036836, SRR18036855) %>%
+  filter(SRR18036836 > 0 & SRR18036855 > 0) %>%
+  select(SRR18036836)
+
+donor_c_enriched <- asv_table %>%
+  select(SRR18036836, SRR18036855, SRR18036842, SRR18036838) %>%
+  filter(SRR18036836 == 0 & SRR18036855 == 0 & SRR18036842 > 0 & SRR18036838 > 0) %>%
+  select(SRR18036838)
+
+donor_d_faecal <- asv_table %>%
+  select(SRR18036831, SRR18036828) %>%
+  filter(SRR18036831 > 0 & SRR18036828 > 0) %>%
+  select(SRR18036831)
+
+donor_d_enriched <- asv_table %>%
+  select(SRR18036831, SRR18036828, SRR18036829, SRR18036826) %>%
+  filter(SRR18036831 == 0 & SRR18036828 == 0 & SRR18036829 > 0 & SRR18036826 > 0) %>%
+  select(SRR18036826)
+
+donor_f_faecal <- asv_table %>%
+  select(SRR18036852, SRR18036848) %>%
+  filter(SRR18036852 > 0 & SRR18036848 > 0) %>%
+  select(SRR18036852)
+
+donor_f_enriched <- asv_table %>%
+  select(SRR18036852, SRR18036848, SRR18036841, SRR18036837) %>%
+  filter(SRR18036852 == 0 & SRR18036848 == 0 & SRR18036841 > 0 & SRR18036837 > 0) %>%
+  select(SRR18036837)
+```
+### Export to csv
+
+```{r}
+write.csv(donor_a_faecal, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_a_faecal.csv")
+
+write.csv(donor_a_enriched, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_a_enriched.csv")
+
+write.csv(donor_b_faecal, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_b_faecal.csv")
+
+write.csv(donor_b_enriched, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_b_enriched.csv")
+
+write.csv(donor_c_faecal, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_c_faecal.csv")
+
+write.csv(donor_c_enriched, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_c_enriched.csv")
+
+write.csv(donor_d_faecal, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_d_faecal.csv")
+
+write.csv(donor_d_enriched, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_d_enriched.csv")
+
+write.csv(donor_f_faecal, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_f_faecal.csv")
+
+write.csv(donor_f_enriched, "./tables/enrichment_analysis/SHIME_Liu_et_al_2022/SHIME_donor_f_enriched.csv")
+```

@@ -1,0 +1,149 @@
+---
+title: "Metadata_ncbi_retrieve"
+author: "David Garcia"
+date: "2022-09-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load libraries
+```{r}
+install.packages("librarian")
+
+librarian::shelf(XML, tidyverse)
+```
+ 
+#Upload xml Files
+```{r}
+
+path <- list.files("./xmlFiles/", full.names = TRUE)
+
+```
+#Get data from the XML files
+```{r}
+metadata <- data.frame()
+
+for (i in path)
+{
+  
+  data <- xmlToList(i)
+  
+  if(is.null(data$EXPERIMENT_PACKAGE))
+  {
+    metadata <- rbind(metadata, cbind(
+      study_title = data$STUDY$DESCRIPTOR$STUDY_TITLE,
+      sequence_accession_number = as.character(data$EXPERIMENT$.attrs["accession"]),
+      primary_id = data$EXPERIMENT$STUDY_REF$IDENTIFIERS$PRIMARY_ID,
+      organism = as.character(data$Pool$Member$.attrs["organism"]),
+      run_id = data$RUN_SET$RUN$IDENTIFIERS$PRIMARY_ID,
+      library_strategy = data$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_STRATEGY,
+      library_source = data$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_SOURCE,
+      library_selection = data$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_SELECTION,
+      sample_name = as.character(data$SAMPLE$.attrs["alias"])
+      ))
+  }
+  else
+  {
+    for(j in 1:length(data))
+    {
+      metadata <- rbind(metadata, cbind(
+      study_title = data[j]$EXPERIMENT_PACKAGE$STUDY$DESCRIPTOR$STUDY_TITLE,
+      sequence_accession_number = as.character(data[j]$EXPERIMENT_PACKAGE$EXPERIMENT$.attrs["accession"]),
+      primary_id = data[j]$EXPERIMENT_PACKAGE$EXPERIMENT$STUDY_REF$IDENTIFIERS$PRIMARY_ID,
+      organism = as.character(data[j]$EXPERIMENT_PACKAGE$Pool$Member$.attrs["organism"]),
+      run_id = data[j]$EXPERIMENT_PACKAGE$RUN_SET$RUN$IDENTIFIERS$PRIMARY_ID,
+      library_strategy = data[j]$EXPERIMENT_PACKAGE$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_STRATEGY,
+      library_source = data[j]$EXPERIMENT_PACKAGE$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_SOURCE,
+      library_selection = data[j]$EXPERIMENT_PACKAGE$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_SELECTION,
+      sample_name = as.character(data[j]$EXPERIMENT_PACKAGE$SAMPLE$.attrs["alias"])
+    ))
+    }
+  }
+}
+
+write.csv(metadata, "./supporting_metadata/xml_metadata.csv")
+```
+#Filter and organize metadata
+```{r}
+metadata <- read.csv("./supporting_metadata/xml_metadata.csv")
+
+metadata <- metadata[,-1]
+
+metadata <- metadata %>% distinct()
+
+counts_study <- metadata %>% 
+  group_by(study_title, primary_id, library_strategy) %>% 
+  summarise(n_sequences = n()) %>% 
+  filter(library_strategy == "AMPLICON", n_sequences > 3) %>% 
+  distinct()
+  
+#Removing duplicates and non-related studies
+#SRP052894 no paper confirmed, SRP074113 no human sample
+
+counts_study <- counts_study[-c(9,10,12,13,14,19),]
+
+#Store studies to be checked
+write.csv(counts_study, "./supporting_metadata/summary_sequences_study.csv")
+
+#Filter selected studies
+
+seqStudy <- data.frame()
+
+for (i in 1:nrow(counts_study)) 
+{
+  tempDF <- metadata %>% filter(primary_id == counts_study$primary_id[i])
+  
+  print(nrow(tempDF))
+  
+  seqStudy <- rbind(seqStudy, cbind(study_title = tempDF$study_title,
+                                    primary_id = tempDF$primary_id, 
+                                    sequence_accession_number = tempDF$sequence_accession_number,
+                                    run_id = tempDF$run_id,
+                                    sample_name = tempDF$sample_name
+                                    ))
+}
+
+#Add operational parameters to metadata table
+
+operational_parameters <- read.csv("./supporting_metadata/operational_parameters_summary.csv", header = TRUE, sep = ",")
+
+seqStudy <- merge(seqStudy, operational_parameters, by = "primary_id")
+
+excluded_samples <- read.csv("./supporting_metadata/excluded_samples.csv")
+
+excluded_samples <- excluded_samples[,c(3:6)]
+
+seqStudy <- left_join(seqStudy, excluded_samples, by = "run_id")
+
+seqStudy$include_sample <- replace_na(seqStudy$include_sample, "yes")
+
+#Store sequences metadata
+
+write.csv(seqStudy, "./supporting_metadata/sequences_metadata.csv")
+
+#Store the primary_id(project accession number) for the 24 papers
+
+project_number <- unique(seqStudy$primary_id)
+
+write.table(project_number, file= "./supporting_metadata/project_number.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
+```
+#Split metadata by project
+```{r}
+metadata <- read.csv("./supporting_metadata/sequences_metadata.csv")
+
+metadata <- metadata[,-1]
+
+colnames(metadata)[4] <- "sampleID"
+
+metadata <- metadata[,-5]
+
+for (i in unique(metadata$primary_id))
+{
+  tempTable <- filter(metadata, metadata$primary_id == i)
+  write.csv(tempTable, paste0("./metadata_by_project/", i, "_metadata.csv"))
+}
+
+```

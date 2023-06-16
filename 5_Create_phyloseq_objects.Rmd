@@ -1,0 +1,91 @@
+---
+title: "Phyloseq Data Curation"
+author: "davidgarciam"
+date: '2022-06-16'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+Curation of data to create phyloseq object using BLASTN taxonomy
+
+#Load libraries
+
+```{r}
+# libraries
+pkgs <- c(
+  "tidyverse",
+  "phyloseq",
+  "Biostrings"
+)
+
+lapply(pkgs, require, character.only = TRUE)
+
+theme_set(theme_bw())
+```
+##Create phyloseq object for all the projects
+
+```{r}
+ProjectID <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+
+ProjectID <- sapply(strsplit(basename(ProjectID), "_"), `[`, 1)
+
+for (i in ProjectID)
+
+{
+  # Load data tables
+  seqtab.nochim <- read_csv(paste0("./outputFiles/seqtab_no_chimeras/", i, "_seqtab.nochim.csv"))
+  seqtab.nochim <- column_to_rownames(seqtab.nochim, var = "...1")
+  otumat <- as.matrix(seqtab.nochim)
+  taxa_asvs <- read_csv(paste0("./outputFiles/all_taxa_asv/", i, "_all_taxa_asvs.csv"))
+  taxa <- taxa_asvs[, c(2, 22:28)]
+  taxa <- column_to_rownames(taxa, var = "ASVID")
+  taxa$family[taxa$genus == "Gemmiger" | taxa$genus == "Intestinimonas"] <- "Oscillospiraceae"
+  taxmat <- as.matrix(taxa)
+  colnames(taxmat) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+  class(otumat)
+  class(taxmat)
+
+  # Merge OTU and TAX data to make phyloseq object
+  OTU <- phyloseq::otu_table(otumat, taxa_are_rows = FALSE)
+  TAX <- phyloseq::tax_table(taxmat)
+  ps <- phyloseq(OTU, TAX)
+
+  # Filter eukaryots data
+  ps <- subset_taxa(ps, !is.na(Phylum))
+  ps <- ps %>% filter_taxa(physeq = ., flist = function(x) {
+    sum(x > 0) > 0
+  }, prune = TRUE)
+
+  # Make object with just bacteria ASVs
+  seqs <- colnames(ps@otu_table)
+  names(seqs) <- colnames(ps@otu_table)
+  dna <- Biostrings::DNAStringSet(seqs)
+
+  # write fasta files
+  Biostrings::writeXStringSet(dna, paste0("./outputFiles/bacteria_asvs_fasta/", i, "_bacteria_asvs.fasta"))
+
+  # Read in sampledata and format
+  metadata_import <- read_csv(paste0("./metadata_by_project/", i, "_metadata.csv"))
+  metadata_import <- metadata_import[, -1]
+  sampledata <- as.data.frame(metadata_import)
+  rownames(sampledata) <- sampledata$sampleID
+  sampledata <- sampledata[, c(4, 1, 2, 3, 5:length(sampledata))]
+  sampledata <- sample_data(data.frame(sampledata))
+  # Add in fasta sequence data for ASVs
+  asv.file <- paste0("./outputFiles/bacteria_asvs_fasta/", i, "_bacteria_asvs.fasta")
+  dna <- readDNAStringSet(asv.file)
+
+  # now merge these into existing phyloseq object
+  ps <- merge_phyloseq(ps, sampledata, dna) # , tree)
+
+  # save phyloseq object as Rda file
+  save(ps, file = paste0("./RData/primary_id/ps_", i, ".Rda"))
+}
+```

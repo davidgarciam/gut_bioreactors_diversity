@@ -1,0 +1,52 @@
+---
+title: "Install_packages"
+author: "David Garcia"
+date: "2023-06-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Install required packages
+```{r}
+install.packages("librarian")
+
+pkgs <- c(
+  "devtools", "XML", "tidyverse", "dada2", "ggplot2", "taxize",
+  "tidyverse", "dada2", "tools", "data.table", "phyloseq",
+  "ggplot2", "janitor", "ggpubr", "vegan", "reshape2",
+  "MicrobiotaProcess", "microbiome", "DirichletMultinomial",
+  "viridis", "RColorBrewer", "Rtsne", "umap", "ggrepel", "scales",
+  "Rcpp", "readr", "UpSetR", "ComplexUpset", "ggstatsplot", "kableExtra"
+)
+
+librarian::shelf(pkgs)
+```
+
+#Install packages from Bioconductor/github
+```{r}
+if (!require("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+BiocManager::install("Biostrings")
+
+devtools::install_github("microsud/microbiomeutilities")
+
+remotes::install_github("kasperskytte/ampvis2")
+
+install_github("anttonalberdi/hilldiv")
+
+remotes::install_github("ying14/yingtools2")
+```
+
+#Check if all the packages are installed.
+```{r}
+lapply(pkgs, require, character.only = TRUE)
+
+pkgs2 <- c("microbiomeutilities", "ampvis2", "BiocManager", "Biostrings", "hilldiv")
+
+lapply(pkgs2, require, character.only = TRUE)
+```

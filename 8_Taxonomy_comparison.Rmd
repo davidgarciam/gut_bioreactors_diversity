@@ -1,0 +1,295 @@
+---
+title: "CompareTaxonomy"
+author: "David Garcia"
+date: '2022-11-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(taxize)
+library(tidyverse)
+library(data.table)
+library(readr)
+library(tools)
+```
+
+#Create output folder
+```{r}
+dir.create(path = "./tables/enrichment_families")
+```
+
+#Retrieve taxonomy for GMRepo samples using taxize
+```{r}
+gutMicrobiome <- read_tsv("./supporting_metadata/GMREPO_relative_abundance_of_all_species_genus_in_all_phenotypes_summary.tsv")
+
+colnames(gutMicrobiome)[3] <- "id"
+
+gutMicrobiome$id <- as.character(gutMicrobiome$id)
+
+taxonID <- gutMicrobiome %>% distinct(id)
+
+taxonomy <- data.frame()
+
+for (i in taxonID$id)
+{
+  tempTaxonomy <- classification(i, db = "ncbi")
+  tempTaxonomy <- rbindlist(tempTaxonomy)
+  tempTaxonomy <- tempTaxonomy %>% filter(rank == "family")
+  tempTaxonomy <- cbind(i, tempTaxonomy)
+  taxonomy <- rbind(taxonomy, cbind(tempTaxonomy))
+}
+
+colnames(gutMicrobiome)[3] <- "i"
+
+gutMicrobiome$i <- as.character(gutMicrobiome$i)
+
+gutMicrobiomeTaxonomy <- merge(taxonomy, gutMicrobiome, by = "i")
+
+colnames(gutMicrobiomeTaxonomy)[1:2] <- c("NCBI_family_id", "family")
+
+colnames(gutMicrobiomeTaxonomy)[4] <- c("NCBI_taxon_id")
+
+write_csv("./supporting_metadata/GMrepo_taxonomy.csv")
+```
+
+# Load samples taxonomy data
+```{r}
+load("./RData/ps_merge.Rda")
+
+taxonomy <- data.frame(ps_merge@tax_table)
+
+taxonomy <- rownames_to_column(taxonomy, var = "ASV_id")
+```
+
+# ARCOL_Leclerc_et_al_2021
+
+```{r}
+asv_list_files <- list.files("./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/", full.names = TRUE)
+
+asv_sample_id <- file_path_sans_ext(list.files("./tables/enrichment_analysis/ARCOL_Leclerc_et_al_2021/"))
+
+csv <- lapply(asv_list_files, read.csv)
+
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+
+# convert to presence/absence data.frame (i.e. >)
+
+project_table[is.na(project_table)] <- 0
+
+
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+test <- project_table
+
+test <- test[, -c(2, 5)]
+
+idx <- data.frame(which(test != 0, arr.ind = TRUE))
+
+row_id <- data.frame(table(idx$row))
+
+row_id <- row_id %>% filter(Freq > 2)
+
+row_id$Var1 <- as.numeric(as.character(row_id$Var1))
+
+important <- test[row_id$Var1, ]
+
+important <- merge(important, taxonomy, by = "ASV_id")
+
+important %>%
+  group_by(Species) %>%
+  summarise_all(na.omit)
+
+write.csv(important, "./tables/enrichment_families/ARCOL_Leclerc_et_al_2021_enriched.csv")
+```
+
+# M-ARCOL_Deschamps_et_al_2020
+
+```{r}
+asv_list_files <- list.files("./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/", full.names = TRUE)
+
+asv_sample_id <- file_path_sans_ext(list.files("./tables/enrichment_analysis/M-ARCOL_Deschamps_et_al_2020/"))
+
+csv <- lapply(asv_list_files, read.csv)
+
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+
+# convert to presence/absence data.frame (i.e. >)
+
+project_table[is.na(project_table)] <- 0
+
+
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+test <- project_table
+
+test <- test[, -c(2, 5)]
+
+idx <- data.frame(which(test != 0, arr.ind = TRUE))
+
+row_id <- data.frame(table(idx$row))
+
+row_id <- row_id %>% filter(Freq > 2)
+
+row_id$Var1 <- as.numeric(as.character(row_id$Var1))
+
+important <- test[row_id$Var1, ]
+
+important <- merge(important, taxonomy, by = "ASV_id")
+
+write.csv(important, "./tables/enrichment_families/M-ARCOL_Deschamps_et_al_2020_enriched.csv")
+```
+
+# SHIME_Firrman_et_al_2021
+
+```{r}
+asv_list_files <- list.files("./tables/enrichment_analysis/SHIME_Firrman_et_al_2021", full.names = TRUE)
+
+asv_sample_id <- file_path_sans_ext(list.files("./tables/enrichment_analysis/SHIME_Firrman_et_al_2021"))
+
+csv <- lapply(asv_list_files, read.csv)
+
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+
+# convert to presence/absence data.frame (i.e. >)
+
+project_table[is.na(project_table)] <- 0
+
+
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+test <- project_table
+
+test <- test[, -c(2, 5)]
+
+idx <- data.frame(which(test != 0, arr.ind = TRUE))
+
+row_id <- data.frame(table(idx$row))
+
+row_id <- row_id %>% filter(Freq > 2)
+
+row_id$Var1 <- as.numeric(as.character(row_id$Var1))
+
+important <- test[row_id$Var1, ]
+
+important <- merge(important, taxonomy, by = "ASV_id")
+
+write.csv(important, "./tables/enrichment_families/SHIME_Firrman_et_al_2021_enriched.csv")
+```
+
+# SHIME_Liu_et_al_2022
+
+```{r}
+asv_list_files <- list.files("./tables/enrichment_analysis/SHIME_Liu_et_al_2022", full.names = TRUE)
+
+asv_sample_id <- file_path_sans_ext(list.files("./tables/enrichment_analysis/SHIME_Liu_et_al_2022"))
+
+csv <- lapply(asv_list_files, read.csv)
+
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+
+# convert to presence/absence data.frame (i.e. >)
+
+project_table[is.na(project_table)] <- 0
+
+
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+test <- project_table
+
+test <- test[, -c(2, 5)]
+
+idx <- data.frame(which(test != 0, arr.ind = TRUE))
+
+row_id <- data.frame(table(idx$row))
+
+row_id <- row_id %>% filter(Freq > 2)
+
+row_id$Var1 <- as.numeric(as.character(row_id$Var1))
+
+important <- test[row_id$Var1, ]
+
+important <- merge(important, taxonomy, by = "ASV_id")
+
+write.csv(important, "./tables/enrichment_families/SHIME_Liu_et_al_2022_enriched.csv")
+```
+
+# SIMGI_Zorraquin_et_al_2021
+
+```{r}
+asv_list_files <- list.files("./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021/", full.names = TRUE)
+
+asv_sample_id <- file_path_sans_ext(list.files("./tables/enrichment_analysis/SIMGI_Zorraquin_et_al_2021"))
+
+csv <- lapply(asv_list_files, read.csv)
+
+project_table <- as.data.frame(csv[[1]])
+
+for (i in 2:length(csv))
+{
+  project_table <- full_join(project_table, as.data.frame(csv[[i]]))
+}
+
+colnames(project_table) <- c("ASV_id", asv_sample_id)
+
+# convert to presence/absence data.frame (i.e. >)
+
+project_table[is.na(project_table)] <- 0
+
+
+project_table[, 2:length(project_table)] <-
+  ifelse(project_table[, 2:length(project_table)] > 1, 1, 0)
+
+test <- project_table
+
+test <- test[, -c(2, 5)]
+
+idx <- data.frame(which(test != 0, arr.ind = TRUE))
+
+row_id <- data.frame(table(idx$row))
+
+row_id <- row_id %>% filter(Freq > 2)
+
+row_id$Var1 <- as.numeric(as.character(row_id$Var1))
+
+important <- test[row_id$Var1, ]
+
+important <- merge(important, taxonomy, by = "ASV_id")
+
+write.csv(important, "./tables/enrichment_families/SIMGI_Zorraquin_et_al_2021_enriched.csv")
+```

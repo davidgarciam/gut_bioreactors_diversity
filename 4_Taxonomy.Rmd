@@ -1,0 +1,168 @@
+---
+title: "Taxonomy"
+author: "davidgarciam"
+date: '2022-10-21'
+output: html_document
+---
+#Load libraries
+```{r}
+install.packages("librarian")
+
+librarian::shelf(taxize, tidyverse, dada2, Biostrings, tools, data.table, phyloseq, ggplot2, janitor)
+```
+
+#Create output folders
+```{r}
+dir.create(path = "./outputFiles/blast_output")
+
+dir.create(path = "./outputFiles/blast_output_formatted")
+
+dir.create(path = "./outputFiles/seqtab_no_chimeras")
+
+dir.create(path = "./outputFiles/family_and_order_check/family", recursive = TRUE)
+
+dir.create(path = "./outputFiles/family_and_order_check/order", recursive = TRUE)
+
+dir.create(path = "./outputFiles/all_taxa_asv")
+```
+
+
+# dada2 (silva v138)
+
+Assign taxonomy using silva trained database (v138.1)
+```{r}
+seqtabFiles <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+
+seqtabFiles <- seqtabFiles[4:24]
+
+for (i in seqtabFiles)
+{
+  tempSeqtab <- read.csv(paste0("./outputFiles/seqtab/", i))
+  tempSeqtab <- column_to_rownames(tempSeqtab, var = "X")
+  tempSeqtab <- as.matrix(tempSeqtab)
+  tempTaxtab <- assignTaxonomy(tempSeqtab, "~/db/dada2/silva-138.1/silva_nr99_v138.1_train_set.fa.gz", multithread = TRUE)
+  write.csv(tempTaxtab, paste0("./outputFiles/taxtab/", i))
+}
+```
+
+#Create fasta files for blast for multiple seqtab files
+```{r}
+seqtabFiles <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+
+seqtabFiles <- file_path_sans_ext(seqtabFiles)
+
+for (i in seqtabFiles)
+{
+  tempSeqtab <- data.table::fread(paste0("./outputFiles/seqtab/", i, ".csv"))
+  tempSeqtab <- column_to_rownames(tempSeqtab, var = "V1")
+  tempSeqtab <- as.data.frame(t(tempSeqtab))
+  seqs <- rownames(tempSeqtab)
+  names(seqs) <- rownames(tempSeqtab)
+  dna <- DNAStringSet(seqs)
+  writeXStringSet(dna, paste0("./outputFiles/fasta_to_blast/", i, "_asv.fasta"))
+}
+```
+
+#BLAST of ASVs to retrieve taxonomy
+```{bash}
+for i in ./outputFiles/fasta_to_blast/*.fasta
+    do
+    fileName="$(basename -- $i)"
+    outputFile="${fileName%.fasta}_blastout.txt"
+    #echo $fileName
+    #echo $outputFile
+    blastn -db ~/db/ncbi/refseq/bacteria.16SrRNA.fna -query $fileName -outfmt 6 -out ./outputFiles/blast_output/$outputFile -num_threads 16
+    done
+```
+
+#Formatting BLAST output
+```{r}
+blastOutFiles <- list.files("./outputFiles/blast_output/", recursive = FALSE)
+
+blastOutFiles <- sapply(strsplit(basename(blastOutFiles), "_"), `[`, 1)
+
+blastOutFiles <- blastOutFiles[23:24]
+
+blastn_fmt6 <- c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore")
+
+for (i in blastOutFiles)
+{
+  blastn_taxa <- data.table::fread(paste0("./outputFiles/blast_output/", i, "_seqtab_asv_blastout.txt"), sep = "\t", header = FALSE)
+  colnames(blastn_taxa) <- blastn_fmt6
+  blastn_taxa_sort <- data.table::setorder(blastn_taxa, qseqid, -pident)
+  blastn_taxa_top <- blastn_taxa_sort[match(unique(blastn_taxa_sort$qseqid), blastn_taxa_sort$qseqid), ]
+  unique_sseqid <- unique(blastn_taxa_top$sseqid)
+  ncbi_lineage <- classification(genbank2uid(id = unique_sseqid), db = "ncbi")
+  ncbi_lineage_df <- cbind(ncbi_lineage)
+  ncbi_lineage_df$sseqid <- unique_sseqid
+  ncbi_lineage_df <- dplyr::select(ncbi_lineage_df, sseqid, query, superkingdom, phylum, class, order, family, genus, species)
+  idx <- which(blastn_taxa_top$sseqid %in% ncbi_lineage_df$sseqid)
+  blastn_taxa_top_lineage <- blastn_taxa_top %>% left_join(ncbi_lineage_df, by = "sseqid")
+  write.csv(blastn_taxa_top_lineage, paste0("./outputFiles/blast_output_formatted/", i, "_blastn_refseq16S_taxa.csv"))
+}
+```
+
+Save taxonomy table and ASV fasta file for later
+```{r}
+# read in seqtable table
+seqtab <- read.csv("./outputFiles/seqtab.csv")
+seqs <- colnames(seqtab)[2:length(seqtab)]
+names <- seqs
+
+names(seqs) <- names
+dna <- DNAStringSet(seqs)
+# write fasta file
+writeXStringSet(dna, "./outputFiles/asvs.fasta")
+```
+
+#Remove chimeras from all the seqtabfiles
+```{r}
+ChimeraOutFiles <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+
+ChimeraOutFiles <- sapply(strsplit(basename(ChimeraOutFiles), "_"), `[`, 1)
+
+summaryChimera <- data.frame()
+
+for (i in ChimeraOutFiles)
+{
+  seqtab <- data.table::fread(paste0("./outputFiles/seqtab/", i, "_seqtab.csv"))
+  seqtab <- column_to_rownames(seqtab, var = "V1")
+  seqtab <- as.matrix(seqtab)
+  seqtab.nochim <- removeBimeraDenovo(seqtab, method = "consensus", multithread = TRUE, verbose = TRUE)
+  # write.csv(seqtab.nochim, paste0("./outputFiles/seqtab_no_chimeras/", i, "_seqtab.nochim.csv"))
+  summaryChimera <- rbind(summaryChimera, cbind(i, dim(seqtab.nochim), dim(seqtab), sum(seqtab.nochim) / sum(seqtab)))
+}
+
+colnames(summaryChimera) <- c("ProjectID", "dim_seqtab_nochim", "dim_seqtab", "nochim_%")
+
+write.csv(summaryChimera, "./outputFiles/seqtab_no_chimeras/summaryChimeras.csv")
+```
+
+#Compare taxonomy tables from dada2 and blast
+```{r}
+ChimeraOutFiles <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+
+ChimeraOutFiles <- sapply(strsplit(basename(ChimeraOutFiles), "_"), `[`, 1)
+
+for (i in ChimeraOutFiles)
+{
+  blastn_taxa_top_lineage <- data.table::fread(paste0("./outputFiles/blast_output_formatted/", i, "_blastn_refseq16S_taxa.csv"))
+  dada2_silva <- data.table::fread(paste0("./outputFiles/taxtab/", i, "_seqtab_silva.csv"), header = TRUE)
+  idx <- which(blastn_taxa_top_lineage$qseqid %in% dada2_silva$V1)
+  blastn_taxa_top_lineage <- blastn_taxa_top_lineage[idx, ]
+  join <- dada2_silva %>% full_join(blastn_taxa_top_lineage, by = c("V1" = "qseqid"))
+  colnames(join)[1] <- "ASVID"
+  idx <- which(join$Family != join$family)
+  familyCheck <- join[idx, ]
+  write.csv(familyCheck, paste0("./outputFiles/family_and_order_check/family/", i, "_family.csv"))
+  idx <- which(join$Order != join$order)
+  orderCheck <- join[idx, ]
+  write.csv(orderCheck, paste0("./outputFiles/family_and_order_check/order/", i, "_order.csv"))
+  seqtab.nochim <- data.table::fread(paste0("./outputFiles/seqtab_no_chimeras/", i, "_seqtab.nochim.csv"))
+  seqtab.nochim <- column_to_rownames(seqtab.nochim, var = "V1")
+  asvs <- as.data.frame(t(seqtab.nochim))
+  asvs <- rownames_to_column(asvs, "ASVID")
+  join_asvs <- join %>% full_join(asvs, by = "ASVID")
+  write.csv(join_asvs, paste0("./outputFiles/all_taxa_asv/", i, "_all_taxa_asvs.csv"))
+}
+```

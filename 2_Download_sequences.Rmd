@@ -1,0 +1,42 @@
+---
+title: "Download_raw_sequences"
+author: "David Garcia"
+date: "2023-06-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Download raw sequences
+```{bash}
+mkdir ./raw_sequences
+
+mv ./2_Download_raw_data.sh ./raw_sequences
+
+mv ./2_tidy_all.sh ./raw_sequences
+
+cd ./raw_sequences
+
+bash 2_Download_raw_data.sh
+```
+
+#Organize sequences
+```{r}
+seqStudy <- read.csv("./supporting_metadata/sequences_identifiers.csv")
+
+loop <- unique(seqStudy$primary_id)  
+
+for (i in loop) {
+dir.create(path = paste0("./raw_sequences/",i))
+}
+```
+
+```{bash}
+cd ./raw_sequences
+
+bash 2_tidy_all.sh
+```
+
+
