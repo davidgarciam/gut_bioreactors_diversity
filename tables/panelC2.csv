@@ -1,0 +1,9 @@
+"","donor_type","variable","mean_value","med","Sdev"
+"1","individual","Observed",24.88,24,7.12
+"2","pooled","Observed",25.21,25,9.67
+"3","individual","Chao1",24.88,24,7.12
+"4","pooled","Chao1",25.21,25,9.67
+"5","individual","Shannon",1.83,1.94,0.42
+"6","pooled","Shannon",1.7,1.63,0.46
+"7","individual","InvSimpson",4.55,4.71,1.61
+"8","pooled","InvSimpson",4.27,3.55,2.05

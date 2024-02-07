@@ -1,7 +1,7 @@
 ---
 title: "Analysis with taxa concatenated to family level"
-author: "segan"
-date: '2022-11-28'
+author: "segan and davidgarciam"
+date: '2024-02-02'
 output:
   github_document:
     toc: true
@@ -16,7 +16,6 @@ knitr::opts_chunk$set(echo = TRUE,
 ```
 
 # Load libraries
-
 ```{r results='hide'}
 # libraries
 pkgs <- c(
@@ -36,9 +35,11 @@ pkgs <- c(
   "microbiome",
   "Rtsne",
   "umap",
-  "yingtools2", #remotes::install_github("ying14/yingtools2")
+  "yingtools2",
   "scales",
-  "ggrepel"
+  "ggrepel",
+  "mva.plots",
+  "rgl"
 )
 
 lapply(pkgs, require, character.only = TRUE)
@@ -54,11 +55,14 @@ dir.create(path = "./tables")
 dir.create(path = "./figures/boxplot")
 dir.create(path = "./figures/pie_charts")
 dir.create(path = "./figures/alphadiv")
+dir.create(path = "./figures/PCA")
 ```
 
+The following steps are part of the data pre-processing for your reference.
+If you want to replicate the results in the manuscript please start from the 
+"Load data" section
 
 # Merge phyloseq files
-
 ```{r}
 # Path to datasets drive
 path_list <- list.files("./RData/primary_id", pattern=".Rda", full.names=TRUE)
@@ -96,14 +100,13 @@ ps_merge <-
   )
 ```
 
-Clean up taxonomy names 
-
+# Clean up taxonomy names 
 ```{r}
 # taxonomy table
 taxtab <- as.data.frame(ps_merge@tax_table)
 #taxtab <- rownames_to_column(taxtab, var = "ASV_id")
 # otu count table
-otutab <- as.data.frame(ps_merge@otu_table)
+otutab <- data.frame(ps_merge@otu_table)
 #otutab <- rownames_to_column(otutab, var = "ASV_id")
 # sample data table
 samtab <- as.data.frame(ps_merge@sam_data)
@@ -111,22 +114,14 @@ samtab <- as.data.frame(ps_merge@sam_data)
 refseq <- refseq(ps_merge, FALSE)
 
 sort(unique(taxtab$Phylum))
-taxtab <-
-  taxtab %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Bacillota", "Firmicutes [Bacillota]", Phylum)) %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Firmicutes", "Firmicutes [Bacillota]", Phylum)) %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Actinomycetota", "Actinobacteria [Actinomycetota]", Phylum)) %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Actinobacteria", "Actinobacteria [Actinomycetota]", Phylum)) %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Pseudomonadota", "Proteobacteria [Pseudomonadota]", Phylum))  %>% 
-  mutate(Phylum = ifelse(Phylum %in% "Proteobacteria", "Proteobacteria [Pseudomonadota]", Phylum)) %>% 
-  mutate(Class = ifelse(Class %in% "Actinomycetes", "Actinomycetia", Class)) %>% 
-  mutate(Family = ifelse(Family %in% "Bacillales Family X. Incertae Sedis", "Bacillales X. (i.s.)", Family)) %>% 
+
+taxtab <- taxtab %>% 
   mutate(Family = ifelse(Family %in% "Clostridiales Family XVII. Incertae Sedis", "Clostridiales XVII. (i.s.)", Family)) %>% 
   mutate(Family = ifelse(Family %in% "Eubacteriales Family XII. Incertae Sedis", "Eubacteriales XII. (i.s.)", Family)) %>% 
-  mutate(Family = ifelse(Family %in% "Eubacteriales Family XIII. Incertae Sedis", "Eubacteriales XIII. (i.s.)", Family)) %>% 
-  mutate(Family = ifelse(Family %in% "Thermoanaerobacterales Family III. Incertae Sedis", "Thermoanaerobacterales III. (i.s.)", Family))
+  mutate(Family = ifelse(Family %in% "Eubacteriales Family XIII. Incertae Sedis", "Eubacteriales XIII. (i.s.)", Family))
 
-sort(unique(taxtab$Phylum))
+
+sort(unique(taxtab$Family))
 
 taxmat <- as.matrix(taxtab)
 otumat <- as.matrix(otutab)
@@ -143,41 +138,16 @@ save(ps_merge, file = "./RData/ps_merge.Rda")
 ```{r}
 load("./RData/ps_merge.Rda")
 
-# ps_merge
-# # phyloseq-class experiment-level object
-# # otu_table()   OTU Table:         [ 83401 taxa and 1752 samples ]
-# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
-# # tax_table()   Taxonomy Table:    [ 83401 taxa by 7 taxonomic ranks ]
-# # refseq()      DNAStringSet:      [ 83401 reference sequences ]
-
-# # number of samples per project
-# table(ps_merge@sam_data$bioreactor_model)
-# # batch_Bas-Bellver_et_al_2020      7
-# # batch_Korth_et_al_2022            420
-# # batch_Kim_et_al_2022              115
-# # batch_Kleigrewe_et_al_2022        27
-# # batch_Elmen_et_al_2020            84
-# # ARCOL_Leclerc_et_al_2021          46
-# # M-ARCOL_Deschamps_et_al_2020      121
-# # SHIME_based_Gaisawat_2020         96
-# # SHIME_Firrman_et_al_2021          50
-# # SHIME_Liu_et_al_2022              30
-# # SHIME_Ma_et_al_2022               45
-# # M-SHIME_Chassaing_et_al_2017      151
-# # M-SHIME_Abbeele_2021              75
-# # SIMGI_Zorraquin_et_al_2021        6
-# # single_stage_Xu_et_al_ 2019       108
-# # TIM-2_Larsen_et_al_2019           132
-# # TIM-2_Vieira_et_al_2021           60
-# # Infors_Oliphant_et_al_2019        62
-# # PolyFermS_Pham_et_al_2019         117
-
+# phyloseq-class experiment-level object
+# otu_table()   OTU Table:         [ 83399 taxa and 1750 samples ]
+# sample_data() Sample Data:       [ 1750 samples by 106 sample variables ]
+# tax_table()   Taxonomy Table:    [ 83399 taxa by 7 taxonomic ranks ]
+# refseq()      DNAStringSet:      [ 83399 reference sequences ]
 ```
 
 # Concatenate taxonomy to family level 
 
 Melt phyloseq object by Family level taxonomy
-
 ```{r}
 grp_abund <- get_group_abundances(ps_merge,
                                   level = "Family",
@@ -224,12 +194,6 @@ ps_merge_fam <- phyloseq(OTU, TAX)
 ps_merge_fam <- merge_phyloseq(ps_merge_fam, sample_data)
 # saved merge concatenated family level taxa, all samples from all projects(inc. zero sum samples) 
 save(ps_merge_fam, file = "./RData/ps_merge_fam.Rda")
-
-# ps_merge_fam
-# # phyloseq-class experiment-level object
-# # otu_table()   OTU Table:         [ 248 taxa and 1752 samples ]
-# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
-# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
 ```
 
 # Load data
@@ -240,17 +204,17 @@ Loading in merged `phyloseq` object concatenated at family level
 load("./RData/ps_merge_fam.Rda")
 
 # ps_merge_fam
-# # phyloseq-class experiment-level object
-# # otu_table()   OTU Table:         [ 248 taxa and 1752 samples ]
-# # sample_data() Sample Data:       [ 1752 samples by 106 sample variables ]
-# # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
+# phyloseq-class experiment-level object
+# otu_table()   OTU Table:         [ 264 taxa and 1750 samples ]
+# sample_data() Sample Data:       [ 1750 samples by 106 sample variables ]
+# tax_table()   Taxonomy Table:    [ 264 taxa by 7 taxonomic ranks ]
 ```
 
 ## Excluding projects/samples
 
 ### 1. Exclude samples with 0 reads
 
-Subset phyloseq object to exclude samples with 0 count
+Subset phyloseq object to exclude samples with 0 counts
 
 ```{r}
 #Identify which samples had sum of 0 reads
@@ -273,7 +237,6 @@ ps_merge_fam <- subset_samples(ps_merge_fam, !sampleID %in%
 ```
 
 ### 2. Exclude samples coming from faeces
-
 ```{r}
 ps_merge_fam <- subset_samples(ps_merge_fam, include_sample == "yes")
 
@@ -283,6 +246,16 @@ ps_merge_fam <- subset_samples(ps_merge_fam, include_sample == "yes")
 # # sample_data() Sample Data:       [ 1619 samples by 106 sample variables ]
 # # tax_table()   Taxonomy Table:    [ 248 taxa by 7 taxonomic ranks ]
 table(ps_merge_fam@sam_data$bioreactor_model)
+```
+### 3. Exclude samples with less than 2500 reads
+
+```{r}
+ps_merge_fam <- prune_samples(sample_sums(ps_merge_fam)>=2500, ps_merge_fam)
+
+# phyloseq-class experiment-level object
+# otu_table()   OTU Table:         [ 264 taxa and 1512 samples ]
+# sample_data() Sample Data:       [ 1512 samples by 91 sample variables ]
+# tax_table()   Taxonomy Table:    [ 264 taxa by 7 taxonomic ranks ]
 ```
 
 ## Set order
@@ -316,7 +289,6 @@ ps_merge_fam@sam_data$bioreactor_model = factor(ps_merge_fam@sam_data$bioreactor
   "batch_Kleigrewe_et_al_2022",
   "batch_Korth_et_al_2022",
   "single_stage_Xu_et_al_ 2019",
-  "SHIME_based_Gaisawat_2020",
   "SHIME_Firrman_et_al_2021",
   "SHIME_Liu_et_al_2022",
   "SHIME_Ma_et_al_2022",
@@ -387,16 +359,12 @@ shape_type = c(0, 1, 2, 3, 4, 5, 6, 7)
 ```
 
 ## Transform to compositional data
-
 ```{r}
+# Please notice that the compositional data is hellinger transformed
 ps_merge_fam_comp = transform_sample_counts(ps_merge_fam, function(x) sqrt(x/sum(x)))
-
-##Can filter to min abundance??
-#ps_merge_fam2_filt = filter_taxa(ps_merge_fam2, function(x) var(x) > 1e-05, TRUE)
 ```
 
 ## Make ampvis2 object
-
 ```{r}
 # require the devtools package to source gist
 if (!require("devtools"))
@@ -406,19 +374,18 @@ if (!require("devtools"))
 devtools::source_gist("8d0ca4206a66be7ff6d76fc4ab8e66c6")
 
 # convert to ampvis2 and then save
-ampvis2_fam <- phyloseq_to_ampvis2(ps_merge_fam)
-ampvis2_fam_comp <- phyloseq_to_ampvis2(ps_merge_fam_comp)
+ampvis2_fam <- amp_load(ps_merge_fam)
+ampvis2_fam_comp <- amp_load(ps_merge_fam_comp)
 ```
 
+Cleaning environment
 ```{r}
 rm(count_family, grp_abund, otumat2)
 rm(OTU_mat, otumat, sample_data, TAX_mat, TAX_names, taxdf, taxmat)
 rm(OTU, TAX, exclude, idx)
 ```
 
-
-# Library size of samples
-
+# Library size of the samples
 ```{r}
 n <- n_distinct(ps_merge_fam@sam_data$primary_id)
 df <-
@@ -434,7 +401,6 @@ df$bioreactor_model = factor(df$bioreactor_model, levels = c(
   "batch_Kleigrewe_et_al_2022",
   "batch_Korth_et_al_2022",
   "single_stage_Xu_et_al_ 2019",
-  "SHIME_based_Gaisawat_2020",
   "SHIME_Firrman_et_al_2021",
   "SHIME_Liu_et_al_2022",
   "SHIME_Ma_et_al_2022",
@@ -453,17 +419,17 @@ libQC <-
   ggplot(data = df,
          aes(
            x = bioreactor_model,
-           y = LibrarySize,
+           y = log10(LibrarySize),
            color = bioreactor_model
          )) + geom_point() +
   scale_color_manual(values = cols_model) +
-  xlab("Bioreactor model") + ylab("Library size") +
+  xlab("Bioreactor model") + ylab("Library Size [Log10(n reads)]") +
   theme(axis.text.x = element_text(angle = 270, hjust = 0, vjust = 0, size =12), 
     axis.text.y = element_text(size =12),
     legend.position = "none")
 
 ggsave(
-  filename = "library_size.png",
+  filename = "library_size.jpeg",
   plot = libQC,
   path = "./figures",
   width = 10,
@@ -471,27 +437,9 @@ ggsave(
   dpi = 300)
 ```
 
-## Check for samples with low reads
-
-```{r}
-data.class(df$LibrarySize)
-# summary of number of samples per project
-summary <- df %>%
-    group_by(primary_id) %>%
-    summarise(count = n())
-summary
-# check with cut off at 5,000 reads
-lowreads <- subset(df, LibrarySize < 5000)
-tab1 <- lowreads %>%
-    group_by(primary_id) %>%
-    summarise(count = n())
-tab1
-```
-
 # Heat maps
 
 ## All projects by taxa
-
 ```{r}
 heatPhylum <- amp_heatmap(ampvis2_fam,
             group_by = "bioreactor_model",
@@ -511,18 +459,19 @@ heatPhylum <- amp_heatmap(ampvis2_fam,
         legend.position="right")
 
 ggsave(
-  "heatmap_Phylum.png",
+  "heatmap_Phylum.jpeg",
   heatPhylum,
   path = "./figures/heatmaps/all",
   width = 25,
   height = 25,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 
 heatFamily <- amp_heatmap(ampvis2_fam,
             group_by = "bioreactor_model",
             tax_aggregate = "Family",
-            tax_show = 40,
+            tax_show = 100,
             color_vector = c("white", 
                              "#e5ba52", 
                              "#ab7ca3", 
@@ -537,12 +486,13 @@ heatFamily <- amp_heatmap(ampvis2_fam,
         legend.position="right")
 
 ggsave(
-  "heatmap_Family.png",
+  "heatmap_Family.jpeg",
   heatFamily,
   path = "./figures/heatmaps/all",
   width = 25,
   height = 25,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
 
@@ -630,9 +580,93 @@ for (i in loop.vector){
 }
 ```
 
-# Ordination - non linear methods
-## t-SNE plots with compositional object
+# Beta-diversity analysis
+## Ordination - Linear methods
+### PCA
+```{r}
+otu_table <- data.frame(ps_merge_fam_comp@otu_table)
 
+metadata <- data.frame(ps_merge_fam_comp@sam_data)
+
+PCA_results <- PCA(otu_table, center = TRUE, scale. = FALSE, plot = TRUE) 
+
+pca_scores <- data.frame(PCA_results$data$scores)
+
+pca_loadings <- data.frame(PCA_results$data$loadings)
+
+explained_variance <- PCA_results$data$pcSum
+
+pca_scores$color <- cols_model[as.numeric(metadata$bioreactor_model)]
+
+PCA_scores_plot <- ggplot(data=pca_scores, aes(x = PC1, y = PC2)) +
+  geom_point(data=pca_scores, aes(color = metadata$bioreactor_model)) +
+  scale_color_manual(values = cols_model) +
+  theme_bw() +
+  labs(color = "Bioreactor model") +
+  xlab(paste0("PC1 (", 
+              round(PCA_results$data$pcSum$`Proportion of Variance`[1], 1),
+       "%)")) +
+  ylab(paste0("PC2 (", 
+              round(PCA_results$data$pcSum$`Proportion of Variance`[2], 1),
+       "%)"))
+
+#ggplotly(PCA_scores_plot)
+
+PCA_loadings_plot <- ggplot(data=pca_loadings, aes(x = PC1, y = PC2, 
+                            label = rownames(pca_loadings))) +
+  geom_point() +
+  geom_text(vjust = 2) +
+  theme_bw() +
+  xlab(paste0("PC1 (", 
+              round(PCA_results$data$pcSum$`Proportion of Variance`[1], 1),
+       "%)")) +
+  ylab(paste0("PC2 (", 
+              round(PCA_results$data$pcSum$`Proportion of Variance`[2], 1),
+       "%)"))
+
+ggsave(PCA_scores_plot, file="./figures/PCA/PCA_scores.pdf", width = 20, 
+       height = 15, units = "cm", scale = 1, dpi = 300)
+
+ggsave(PCA_loadings_plot, file="./figures/PCA/PCA_loadings.pdf", width = 15,
+       height = 15, units = "cm", scale = 1, dpi = 300)
+
+# 3D plot
+
+plot3d(x = pca_scores$PC1, y = pca_scores$PC2, z = pca_scores$PC3,
+       col = pca_scores$color,
+       type = 's',
+       radius = .01,
+       xlab = "PC1",
+       ylab = "PC2",
+       zlab = "PC3")
+
+rglwidget()
+```
+
+### PERMANOVA
+```{r}
+otu_table <- data.frame(ps_merge_fam_comp@otu_table)
+
+metadata <- data.frame(ps_merge_fam_comp@sam_data)
+
+perm_dist <- vegdist(otu_table, method = "euclidean")
+
+dispersion <- betadisper(perm_dist, group = metadata$bioreactor_model,
+                         type = "centroid")
+
+plot(dispersion)
+
+# Check the homogeneity of multivariate dispersion between the projects
+
+anova(dispersion)
+
+# The p-value of the ANOVA is <0.05, indicating that there are significant
+# differences in the multivariate dispersion between the projects
+# This will limit the interpretation of the PERMANOVA.
+```
+
+## Ordination - non linear methods
+### t-SNE plots with compositional object
 ```{r}
 set.seed(2)
 dst <- phyloseq::distance(ps_merge_fam_comp, method = "euclidean")
@@ -660,12 +694,13 @@ tsne_plot <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = bioreactor_model
   scale_color_manual(values = cols_model)
 
 ggsave(
-  "distance_comp_tsne_hellinger.png",
+  "distance_comp_tsne_hellinger.jpeg",
   tsne_plot,
   path = "./figures/tSNE",
   width = 25,
   height = 20,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 
 # # Interactive view to understand patterns
@@ -682,16 +717,17 @@ tsne_plot2 <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = bioreactor_mode
   theme(legend.title=element_blank())
 
 ggsave(
-  "distance_comp_tsne_hellinger_facet.png",
+  "distance_comp_tsne_hellinger_facet.jpeg",
   tsne_plot2,
   path = "./figures/tSNE",
   width = 25,
   height = 20,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
 
-#### Effect of additional parameters on community structure
+### Effect of additional parameters on community structure
 
 Supplementary figure 
 
@@ -700,12 +736,6 @@ tsne_plot_16S <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = region_16S))
   geom_point() +
   labs(color = "16S rRNA region") +
   theme(aspect.ratio = 1) +  
-  scale_color_viridis(discrete=TRUE)
-
-tsne_plot_CNratio <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = as.character(CNratio))) +
-  geom_point() +
-  labs(color = "C:N ratio") +
-  theme(aspect.ratio = 1) +
   scale_color_viridis(discrete=TRUE)
 
 tsne_plot_vitamins <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = vitamins)) +
@@ -724,19 +754,19 @@ tsne_plot_country <- ggplot(tsnedata, aes(x = tSNE1, y = tSNE2, color = country_
 gg_arrange_1 <-
   ggarrange(
     tsne_plot_16S,
-    tsne_plot_CNratio,
     tsne_plot_country,
     tsne_plot_vitamins,
-    labels = c("A", "B", "C", "D")
+    labels = c("A", "B", "C")
   )
 
 ggsave(
-  "distance_comp_tsne_hellinger_supp1.png",
+  "distance_comp_tsne_hellinger_supp1.jpeg",
   gg_arrange_1,
   path = "./figures/tSNE",
   width = 25,
   height = 25,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
 
@@ -777,22 +807,25 @@ gg_arrange_2 <-
   )
 
 ggsave(
-  "distance_comp_tsne_hellinger_supp2.png",
+  "distance_comp_tsne_hellinger_supp2.jpeg",
   gg_arrange_2,
   path = "./figures/tSNE",
   width = 25,
   height = 25,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
-## UMAP plots with compositional object
+
+### UMAP plots with compositional object
 ```{r}
 # count
-s <- get.samp(ps_merge_fam_comp)
-otu <- get.otu(ps_merge_fam_comp, as.matrix = TRUE)
+s <- data.frame(ps_merge_fam_comp@sam_data)
+colnames(s)[1] <- "sample"
+otu <- data.frame(ps_merge_fam_comp@otu_table)
 # depending on how otu table was original formatted may need to transpose
 # rows = samples and columns = otus/taxa
-otu <- t(otu)
+#otu <- t(otu)
 umap <- umap(otu)
 umapdata <- umap$layout %>%
   data.frame() %>%
@@ -807,7 +840,7 @@ umap_plot <- ggplot(umapdata, aes(x = UMAP1, y = UMAP2, color = bioreactor_model
   scale_color_manual(values = cols_model)
 
 ggsave(
-  "distance_comp_umap_hellinger.png",
+  "distance_comp_umap_hellinger.jpeg",
   umap_plot,
   path = "./figures/umap",
   width = 25,
@@ -827,12 +860,13 @@ umap_plot2 <- ggplot(umapdata, aes(x = UMAP1, y = UMAP2, color = bioreactor_mode
   theme(legend.title=element_blank())
 
 ggsave(
-  "distance_comp_umap_hellinger_facet.png",
+  "distance_comp_umap_hellinger_facet.jpeg",
   umap_plot2,
   path = "./figures/umap",
   width = 25,
   height = 20,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
 
@@ -860,7 +894,7 @@ p <-
     axis.text.x = element_text(angle = 90, size = 8)) + xlab("") + ylab("") 
 
 ggsave(
-  "count_bioreactor_model.png",
+  "count_bioreactor_model.pdf",
   p,
   path = "./figures/alphadiv",
   width = 25,
@@ -1093,10 +1127,13 @@ df$med <- round(df$med, 2)
 df$Sdev <- round(df$Sdev, 2)
 kbl(df, caption = "Group Rows") %>%
   kable_paper("striped", full_width = F) %>%
-  pack_rows("Group 1", 1, 19) %>%
-  pack_rows("Group 2", 20, 38) %>%
-  pack_rows("Group 3", 39, 57) %>%
-  pack_rows("Group 4", 58, 76)
+  pack_rows("Group 1", 1, 18) %>%
+  pack_rows("Group 2", 19, 36) %>%
+  pack_rows("Group 3", 37, 54) %>%
+  pack_rows("Group 4", 55, 72)
+
+write.csv(df, file = "./tables/panelA.csv")
+
 
 df <- alpha_count_df %>%
   group_by(bioreactor_type, variable) %>%
@@ -1112,6 +1149,8 @@ kbl(df, caption = "Group Rows") %>%
   pack_rows("Group 3", 17, 24) %>%
   pack_rows("Group 4", 25, 32)
 
+write.csv(df, file = "./tables/panelB.csv")
+
 df <- alpha_count_df %>%
   group_by(donor, variable) %>%
   summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
@@ -1126,6 +1165,8 @@ kbl(df, caption = "Group Rows") %>%
   pack_rows("Group 3", 11, 15) %>%
   pack_rows("Group 4", 16, 20)
 
+write.csv(df, file = "./tables/panelC.csv")
+
 df <- alpha_count_df %>%
   group_by(donor_type, variable) %>%
   summarize(mean_value = mean(value), med = median(value), Sdev = sd(value))
@@ -1139,8 +1180,9 @@ kbl(df, caption = "Group Rows") %>%
   pack_rows("Group 2", 3, 4) %>%
   pack_rows("Group 3", 5, 6) %>%
   pack_rows("Group 4", 7, 8)
-```
 
+write.csv(df, file = "./tables/panelC2.csv")
+```
 
 # Rarefaction curves
 
@@ -1153,14 +1195,14 @@ rarecurve_prj <-
 
 
 ggsave(
-  filename = paste0("./figures/rarecurve.png"),
+  filename = paste0("./figures/rarecurve.jpeg"),
   rarecurve_prj,
   width = 40,
   height = 25,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 ```
-
 
 Statistical assessment of sequencing depth for variable (primary_id) - one per primary_id (with confidence intervals)
 
@@ -1204,7 +1246,7 @@ hill_numbers <- data.frame(hill_0, hill_1, hill_2, hill_3)
 
 sample_data <- data.frame(ps_merge_fam@sam_data)
 
-sample_data <- data.frame(sample_data[, c(5, 10)], hill_numbers)
+sample_data <- data.frame(sample_data[, c(5, 10, 92)], hill_numbers)
 
 sample_data_long <-
   pivot_longer(sample_data,
@@ -1283,12 +1325,13 @@ hill_numbers_plot_all <-
   )
 
 ggsave(
-  "hill_numbers_all.png",
+  "hill_numbers_all.jpeg",
   hill_numbers_plot_all,
   path = "./figures/alphadiv/",
   width = 35,
   height = 20,
-  units = "cm"
+  units = "cm",
+  dpi = 300
 )
 
 
@@ -1443,31 +1486,23 @@ taxonomyBioreactors <- as.data.frame(ps_merge_fam@tax_table)
 
 taxonomyFecal <- read.csv("./supporting_metadata/GMrepo_taxonomy.csv")
 
-taxonomyFecal <-
-  taxonomyFecal %>% 
-  mutate(phylum = ifelse(phylum %in% "Bacillota", "Firmicutes [Bacillota]", phylum)) %>% 
-  mutate(phylum = ifelse(phylum %in% "Firmicutes", "Firmicutes [Bacillota]", phylum)) %>% 
-  mutate(phylum = ifelse(phylum %in% "Actinomycetota", "Actinobacteria [Actinomycetota]", phylum)) %>% 
-  mutate(phylum = ifelse(phylum %in% "Actinobacteria", "Actinobacteria [Actinomycetota]", phylum)) %>% 
-  mutate(phylum = ifelse(phylum %in% "Pseudomonadota", "Proteobacteria [Pseudomonadota]", phylum))  %>% 
-  mutate(phylum = ifelse(phylum %in% "Proteobacteria", "Proteobacteria [Pseudomonadota]", phylum)) %>% 
-  mutate(family = ifelse(family %in% "Bacillales family X. Incertae Sedis", "Bacillales X. (i.s.)", family)) %>% 
-  mutate(family = ifelse(family %in% "Clostridiales family XVII. Incertae Sedis", "Clostridiales XVII. (i.s.)", family)) %>% 
-  mutate(family = ifelse(family %in% "Eubacteriales family XII. Incertae Sedis", "Eubacteriales XII. (i.s.)", family)) %>% 
-  mutate(family = ifelse(family %in% "Eubacteriales family XIII. Incertae Sedis", "Eubacteriales XIII. (i.s.)", family)) %>% 
-  mutate(family = ifelse(family %in% "Thermoanaerobacterales family III. Incertae Sedis", "Thermoanaerobacterales III. (i.s.)", family))
+# Bioreactors vs GMRepo
 
 bioreactor_vs_fecal <- data.frame(setdiff(taxonomyBioreactors$Family, taxonomyFecal$family))
 
-bioreactor_vs_fecal <- data.frame(bioreactor_vs_fecal[-29,])
+bioreactor_vs_fecal <- data.frame(bioreactor_vs_fecal[c(-6, -15, -36),])
 
 colnames(bioreactor_vs_fecal) <- "family_samples_only"
 
+# GMRepo vs Bioreactors
+
 fecal_vs_bioreactor <- data.frame(setdiff(taxonomyFecal$family, taxonomyBioreactors$Family))
 
-fecal_vs_bioreactor <- data.frame(fecal_vs_bioreactor[-30,])
+fecal_vs_bioreactor <- data.frame(fecal_vs_bioreactor[c(-3, -98), ])
 
 colnames(fecal_vs_bioreactor) <- "family_GM_only"
+
+# Add classification at the phylum level
 
 for (i in 1:length(bioreactor_vs_fecal$family_samples_only))
 {
@@ -1493,8 +1528,7 @@ for (i in 1:length(fecal_vs_bioreactor$family_GM_only))
 
 write.csv(bioreactor_vs_fecal, "./tables/bioreactor_vs_fecal.csv")
 
-write.csv(as.data.frame(fecal_vs_bioreactor), "./tables/fecal_vs_bioreactor.csv")
-
+write.csv(fecal_vs_bioreactor, "./tables/fecal_vs_bioreactor.csv")
 ```
 
 ## Boxplots
@@ -1530,9 +1564,9 @@ phylum_GM_only <- phylum_GM_only %>% select(phylum_GM_only) %>%
   arrange(perc) %>%
   mutate(labels = scales::percent(perc))
 
-phylum_GM_only <- phylum_GM_only[25:34,]
+phylum_GM_only <- phylum_GM_only[34:41,]
 
-new <- c("Other", 24, as.numeric(1-sum(phylum_GM_only$perc)), scales::percent(1-sum(phylum_GM_only$perc)))
+new <- c("Other", 41-8, as.numeric(1-sum(phylum_GM_only$perc)), scales::percent(1-sum(phylum_GM_only$perc)))
 
 phylum_GM_only <- rbind(phylum_GM_only,new)
 
@@ -1563,10 +1597,10 @@ phylum_samples_only2 <- phylum_samples_only %>%
 
 # plots
 
-pallete_1 <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6", "#6A3D9A", "#FFFF99")
+pallete_1 <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6")
 
-pallete_2 <- c("#CAB2D6", "#FDBF6F", "#B15928", "#d9ef8b", "#808000", "#005a32", "#FF7F00", "#1F78B4", "#FB9A99", "#6A3D9A")
-
+pallete_2 <- c("#FDBF6F", "#33A02C", "#B15928", "#d9ef8b", "#808000", "#005a32", "#B2DF8A", "#6A3D9A", "#E31A1C",
+               "#1F78B4", "#FF7F00")
 
 plot_phylum_GM <- ggplot(phylum_GM_only, aes(x = "" , y = perc, fill = fct_inorder(phylum_GM_only))) +
   geom_col(width = 1, color = 1) +
@@ -1594,9 +1628,9 @@ arrange_plot <-
   ggarrange(
     plot_phylum_samples,
     plot_phylum_GM,
-    ncol = 1,
-    nrow = 2,
-    labels = c("A.", "B."),
+    ncol = 2,
+    nrow = 1,
+    labels = c("A", "B"),
     common.legend = FALSE,
     legend = "bottom"
   )

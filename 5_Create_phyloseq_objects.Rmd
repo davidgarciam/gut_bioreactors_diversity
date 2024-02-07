@@ -32,7 +32,7 @@ theme_set(theme_bw())
 ##Create phyloseq object for all the projects
 
 ```{r}
-ProjectID <- list.files("./outputFiles/seqtab/", recursive = FALSE)
+ProjectID <- list.files("./outputFiles/seqtab_no_chimeras/", recursive = FALSE)
 
 ProjectID <- sapply(strsplit(basename(ProjectID), "_"), `[`, 1)
 
@@ -43,10 +43,9 @@ for (i in ProjectID)
   seqtab.nochim <- read_csv(paste0("./outputFiles/seqtab_no_chimeras/", i, "_seqtab.nochim.csv"))
   seqtab.nochim <- column_to_rownames(seqtab.nochim, var = "...1")
   otumat <- as.matrix(seqtab.nochim)
-  taxa_asvs <- read_csv(paste0("./outputFiles/all_taxa_asv/", i, "_all_taxa_asvs.csv"))
+  taxa_asvs <- read_csv(paste0("./outputFiles/all_taxa_asv_update/", i, "_all_taxa_asvs.csv"))
   taxa <- taxa_asvs[, c(2, 22:28)]
   taxa <- column_to_rownames(taxa, var = "ASVID")
-  taxa$family[taxa$genus == "Gemmiger" | taxa$genus == "Intestinimonas"] <- "Oscillospiraceae"
   taxmat <- as.matrix(taxa)
   colnames(taxmat) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
   class(otumat)

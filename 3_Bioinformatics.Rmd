@@ -14,7 +14,7 @@ librarian::shelf("dada2", "ggplot2")
 
 #Create output folders
 ```{r}
-dir.create(path = "./outputFiles/reports/PlotQualityProfile", recursive = TRUE)
+dir.create(path = "./outputFiles/reports/plotQualityProfile", recursive = TRUE)
 
 dir.create(path = "./outputFiles/filterout")
 

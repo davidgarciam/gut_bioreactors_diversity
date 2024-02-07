@@ -9,7 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+# Load libraries
+```{r, warning=FALSE}
 library(taxize)
 library(tidyverse)
 library(data.table)
@@ -17,14 +18,19 @@ library(readr)
 library(tools)
 ```
 
-#Create output folder
+# Create output folder
 ```{r}
 dir.create(path = "./tables/enrichment_families")
 ```
 
-#Retrieve taxonomy for GMRepo samples using taxize
+# Retrieve taxonomy for GMRepo taxa using taxize.
+This step can take a while because taxize requests the taxonomy to the ncbi and the taxa list is long.
+If you don't want to repeat this step, you can use the output file
+"./supporting_metadata/GMrepo_taxonomy.csv"
+
 ```{r}
-gutMicrobiome <- read_tsv("./supporting_metadata/GMREPO_relative_abundance_of_all_species_genus_in_all_phenotypes_summary.tsv")
+gutMicrobiome <- read_tsv("./supporting_metadata/GMREPO_relative_abundance_of_all_species_genus_in_all_phenotypes_summary.tsv",
+                          skip = 2)
 
 colnames(gutMicrobiome)[3] <- "id"
 
@@ -32,28 +38,62 @@ gutMicrobiome$id <- as.character(gutMicrobiome$id)
 
 taxonID <- gutMicrobiome %>% distinct(id)
 
-taxonomy <- data.frame()
+taxonomy_results <- list()
 
-for (i in taxonID$id)
-{
-  tempTaxonomy <- classification(i, db = "ncbi")
-  tempTaxonomy <- rbindlist(tempTaxonomy)
-  tempTaxonomy <- tempTaxonomy %>% filter(rank == "family")
-  tempTaxonomy <- cbind(i, tempTaxonomy)
-  taxonomy <- rbind(taxonomy, cbind(tempTaxonomy))
+error_ids <- list()
+
+max_retries <- 3
+
+for (i in taxonID$id) {
+  retry_count <- 0
+
+  while(retry_count < max_retries) {
+    retry_count <- retry_count + 1
+    tryCatch({
+      taxonomy <- classification(i, db = "ncbi")
+      taxonomy_results[[as.character(i)]] <- taxonomy
+      break
+    },
+    error = function(e) {
+      cat("Error for ID", i, ":", conditionMessage(e), "Attempt", retry_count)
+      error_ids <- c(error_ids, id)
+    })
+  }
 }
 
-colnames(gutMicrobiome)[3] <- "i"
+save(taxonomy_results, file = "./RData/taxonomy_results_list.RData")
+```
 
-gutMicrobiome$i <- as.character(gutMicrobiome$i)
+# Format GMRepo taxonomy table
 
-gutMicrobiomeTaxonomy <- merge(taxonomy, gutMicrobiome, by = "i")
+```{r}
+load("./RData/taxonomy_results_list.RData")
 
-colnames(gutMicrobiomeTaxonomy)[1:2] <- c("NCBI_family_id", "family")
+taxonomy <- data.frame()
 
-colnames(gutMicrobiomeTaxonomy)[4] <- c("NCBI_taxon_id")
+# i <- "1678"
 
-write_csv("./supporting_metadata/GMrepo_taxonomy.csv")
+for (i in names(taxonomy_results)) {
+  tempTaxonomy <- taxonomy_results[[i]]
+  tempTaxonomy <- rbindlist(tempTaxonomy)
+  tempFamily <- tempTaxonomy %>% filter(rank == "family")
+  tempPhylum <- tempTaxonomy %>% filter(rank == "phylum")
+  taxonomy <- rbind(taxonomy, cbind(i, tempFamily, tempPhylum))
+}
+
+# Exclude taxa with unknown family classification
+
+idx <- which(is.na(taxonomy$name) == TRUE)
+
+taxonomy <- taxonomy[-idx, ]
+
+# Change headings
+
+colnames(taxonomy) <- c("NCBI_taxon_id", "family", "rank_1",
+                        "NCBI_family_id", "phylum", "rank_2",
+                        "NCBI_phylum_id")
+
+write_csv(taxonomy, "./supporting_metadata/GMrepo_taxonomy.csv")
 ```
 
 # Load samples taxonomy data

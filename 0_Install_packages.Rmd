@@ -40,6 +40,8 @@ remotes::install_github("kasperskytte/ampvis2")
 install_github("anttonalberdi/hilldiv")
 
 remotes::install_github("ying14/yingtools2")
+
+devtools::install_github("phenological/mva-plots")
 ```
 
 #Check if all the packages are installed.
